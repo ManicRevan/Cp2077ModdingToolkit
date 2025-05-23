@@ -1,0 +1,81 @@
+{
+  "appId": "com.cyberpunk2077modkit.app",
+  "productName": "Cyberpunk 2077 Modding Toolkit",
+  "copyright": "Copyright © 2023 CyberpunkModKit",
+  "directories": {
+    "output": "dist",
+    "buildResources": "build"
+  },
+  "files": [
+    "build/**/*",
+    "node_modules/**/*",
+    "package.json",
+    "main.js",
+    "preload.js",
+    "renderer/**/*",
+    "assets/**/*",
+    "!node_modules/.bin",
+    "!**/*.{obj,psd,log}"
+  ],
+  "extraResources": [
+    {
+      "from": "tools",
+      "to": "tools",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "templates",
+      "to": "templates",
+      "filter": ["**/*"]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ],
+    "icon": "build/icon.ico",
+    "requestedExecutionLevel": "asInvoker"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "CP2077 Modding Toolkit",
+    "menuCategory": "Cyberpunk 2077 Tools",
+    "runAfterFinish": true,
+    "installerIcon": "build/installer-icon.ico",
+    "uninstallerIcon": "build/uninstaller-icon.ico",
+    "installerHeader": "build/installer-header.bmp",
+    "installerSidebar": "build/installer-sidebar.bmp",
+    "uninstallerSidebar": "build/uninstaller-sidebar.bmp",
+    "license": "LICENSE.txt",
+    "artifactName": "Cyberpunk2077ModdingToolkit-Setup-${version}.${ext}",
+    "differentialPackage": true,
+    "include": "installer.nsh"
+  },
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/wolframalpha-api/**/*",
+    "node_modules/sharp/**/*"
+  ],
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "cp2077modkit",
+      "repo": "moddingtoolkit",
+      "releaseType": "release"
+    }
+  ],
+  "afterPack": "./scripts/afterPack.js",
+  "afterSign": "./scripts/afterSign.js",
+  "fileAssociations": [
+    {
+      "ext": "cp2mod",
+      "name": "Cyberpunk 2077 Mod Project",
+      "description": "Cyberpunk 2077 Mod Project File",
+      "icon": "build/file-icon.ico",
+      "role": "Editor"
+    }
+  ]
+}

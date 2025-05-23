@@ -1,0 +1,12 @@
+node_modules/
+dist/
+output/
+mod/
+build/
+assets/icons/
+plugins/
+tools/
+.DS_Store
+*.log
+*.tmp
+.env 

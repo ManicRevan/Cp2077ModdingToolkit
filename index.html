@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk 2077 Modding Toolkit</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --cp-yellow: #fcee0a;
+            --cp-blue: #00ffff;
+            --cp-pink: #ff00ff;
+            --cp-dark: #181818;
+            --cp-darker: #101010;
+            --cp-light: #e0e0e0;
+            --sidebar-width: 320px;
+            --console-height: 180px;
+        }
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: var(--cp-dark);
+            color: var(--cp-light);
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+        
+        .container-fluid {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 0;
+        }
+        
+        /* Header */
+        .header {
+            background-color: var(--cp-darker);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--cp-blue);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--cp-yellow);
+        }
+        
+        /* Main layout */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--cp-darker);
+            border-right: 1px solid #333;
+            overflow-y: auto;
+        }
+        
+        .sidebar-section {
+            border-bottom: 1px solid #333;
+            padding: 10px;
+        }
+        
+        .sidebar-section h3 {
+            color: var(--cp-blue);
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+        
+        /* Drop zones */
+        .drop-zone {
+            border: 2px dashed #555;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+            transition: border-color 0.3s ease;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        .drop-zone:hover, .drop-zone.active {
+            border-color: var(--cp-blue);
+            background-color: rgba(0, 255, 255, 0.05);
+        }
+        
+        /* Workspace */
+        .workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .workspace-header {
+            background-color: var(--cp-darker);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--cp-blue);
+        }
+        
+        .scene-graph {
+            flex: 1;
+            background-color: #1a1a1a;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow: auto;
+            position: relative;
+        }
+        
+        .scene-node {
+            position: absolute;
+            width: 150px;
+            background-color: #2a2a2a;
+            border: 1px solid var(--cp-blue);
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            cursor: move;
+        }
+        
+        /* Console */
+        .console-container {
+            height: var(--console-height);
+            background-color: var(--cp-darker);
+            border-top: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .console-header {
+            padding: 5px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid #333;
+        }
+        
+        .console-log {
+            flex: 1;
+            padding: 10px 15px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+        }
+        
+        .log-message {
+            margin-bottom: 5px;
+            padding: 3px 0;
+            border-bottom: 1px dotted #333;
+        }
+        
+        .log-info { color: var(--cp-light); }
+        .log-success { color: #4CAF50; }
+        .log-warning { color: #FFC107; }
+        .log-error { color: #F44336; }
+        
+        /* Status bar */
+        .status-bar {
+            height: 25px;
+            background-color: var(--cp-darker);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 0.8rem;
+            border-top: 1px solid #333;
+        }
+        
+        /* AI tool sections */
+        .ai-section {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <header class="header">
+            <h1>Cyberpunk 2077 Modding Toolkit</h1>
+            <div class="toolbar">
+                <button id="saveProject" class="btn btn-primary"><i class="fas fa-save"></i> Save Project</button>
+                <button id="loadProject" class="btn btn-secondary"><i class="fas fa-folder-open"></i> Load Project</button>
+                <button id="exportMod" class="btn btn-success"><i class="fas fa-file-export"></i> Export Mod</button>
+            </div>
+        </header>
+
+        <!-- Theme toggle button -->
+        <div class="position-absolute top-0 end-0 p-3">
+            <button id="themeToggle" class="btn btn-outline-light" aria-label="Toggle dark/light mode">
+                <i class="fas fa-moon"></i>
+            </button>
+        </div>
+
+        <div class="main-content">
+            <!-- Sidebar with tools -->
+            <div class="sidebar">
+                <!-- Batch Automation Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-cogs"></i> Batch Automation</h3>
+                    <button id="batchImportAll" class="btn btn-outline-primary w-100 mb-2">Batch Import All</button>
+                    <button id="batchExportAll" class="btn btn-outline-primary w-100 mb-2">Batch Export All</button>
+                    <button id="batchConvertAll" class="btn btn-outline-primary w-100">Batch Convert All</button>
+                    <button id="analyzeModBtn" class="btn btn-outline-warning w-100 mt-2" aria-label="Analyze Mod" title="Analyze the entire mod for performance and compatibility">Analyze Mod</button>
+                    <button id="analyzeAssetBtn" class="btn btn-outline-warning w-100 mt-2" aria-label="Analyze Asset" title="Analyze a single asset for performance and compatibility">Analyze Asset</button>
+                    <input type="file" id="batchFileInput" class="form-control mt-2" multiple webkitdirectory directory>
+                </div>
+                <!-- Mesh Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-cube"></i> Mesh Tools</h3>
+                    <button id="importMesh" class="btn btn-outline-primary w-100 mb-2">Import Mesh</button>
+                    <button id="editMesh" class="btn btn-outline-primary w-100 mb-2">Edit Mesh</button>
+                    <button id="exportMesh" class="btn btn-outline-primary w-100">Export Mesh</button>
+                    <button id="openMeshEditor" class="btn btn-outline-warning w-100 mt-2">Open Mesh Editor</button>
+                    <button id="batchImportMesh" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportMesh" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertMesh" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <button id="generateMeshLOD" class="btn btn-outline-success w-100 mt-2" aria-label="Generate LODs for selected mesh" title="Generate Level of Detail (LOD) meshes for the selected mesh file">Generate Mesh LODs</button>
+                    <button id="batchGenerateMeshLOD" class="btn btn-outline-success w-100 mt-2" aria-label="Batch generate LODs for meshes" title="Batch generate LODs for multiple mesh files">Batch Generate Mesh LODs</button>
+                    <input type="file" id="meshBatchFileInput" class="drop-zone-input mt-2" accept=".mesh,.obj,.fbx,.glb" multiple hidden>
+                    <div class="drop-zone" id="meshDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop mesh files here</p>
+                        </div>
+                        <input type="file" id="meshFileInput" class="drop-zone-input" accept=".mesh,.obj,.fbx,.glb" multiple hidden>
+                    </div>
+                </div>
+                <!-- Texture Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-images"></i> Texture Tools</h3>
+                    <button id="importTexture" class="btn btn-outline-primary w-100 mb-2">Import Texture</button>
+                    <button id="editTexture" class="btn btn-outline-primary w-100 mb-2">Edit Texture</button>
+                    <button id="exportTexture" class="btn btn-outline-primary w-100">Export Texture</button>
+                    <button id="batchImportTexture" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportTexture" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertTexture" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <input type="file" id="textureBatchFileInput" class="drop-zone-input mt-2" accept=".png,.jpg,.jpeg,.dds,.tga" multiple hidden>
+                    <div class="drop-zone" id="textureDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop texture files here</p>
+                        </div>
+                        <input type="file" id="textureFileInput" class="drop-zone-input" accept=".png,.jpg,.jpeg,.dds,.tga" multiple hidden>
+                    </div>
+                </div>
+                <!-- Audio Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-music"></i> Audio Tools</h3>
+                    <button id="importAudio" class="btn btn-outline-primary w-100 mb-2">Import Audio</button>
+                    <button id="editAudio" class="btn btn-outline-primary w-100 mb-2">Edit Audio</button>
+                    <button id="exportAudio" class="btn btn-outline-primary w-100">Export Audio</button>
+                    <button id="batchImportAudio" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportAudio" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertAudio" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <input type="file" id="audioBatchFileInput" class="drop-zone-input mt-2" accept=".wav,.mp3,.ogg" multiple hidden>
+                    <div class="drop-zone" id="audioDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop audio files here</p>
+                        </div>
+                        <input type="file" id="audioFileInput" class="drop-zone-input" accept=".wav,.mp3,.ogg" multiple hidden>
+                    </div>
+                </div>
+                <!-- Quest Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-tasks"></i> Quest Tools</h3>
+                    <button id="createQuest" class="btn btn-outline-primary w-100 mb-2">Create New Quest</button>
+                    <button id="importQuest" class="btn btn-outline-primary w-100 mb-2">Import Quest</button>
+                    <button id="exportQuest" class="btn btn-outline-primary w-100">Export Quest</button>
+                    <button id="batchImportQuest" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportQuest" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertQuest" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <input type="file" id="questBatchFileInput" class="drop-zone-input mt-2" accept=".quest,.json" multiple hidden>
+                    <div class="drop-zone" id="questDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop quest files here</p>
+                        </div>
+                        <input type="file" id="questFileInput" class="drop-zone-input" accept=".quest,.json" multiple hidden>
+                    </div>
+                </div>
+                <!-- Scene Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-film"></i> Scene Tools</h3>
+                    <button id="createScene" class="btn btn-outline-primary w-100 mb-2">Create New Scene</button>
+                    <button id="importScene" class="btn btn-outline-primary w-100 mb-2">Import Scene</button>
+                    <button id="exportScene" class="btn btn-outline-primary w-100">Export Scene</button>
+                    <button id="batchImportScene" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportScene" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertScene" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <input type="file" id="sceneBatchFileInput" class="drop-zone-input mt-2" accept=".scene,.json" multiple hidden>
+                    <div class="drop-zone" id="sceneDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop scene files here</p>
+                        </div>
+                        <input type="file" id="sceneFileInput" class="drop-zone-input" accept=".scene,.json" multiple hidden>
+                    </div>
+                </div>
+                <!-- NPC Tools Section (add batch controls) -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-user"></i> NPC Tools</h3>
+                    <button id="createNPC" class="btn btn-outline-primary w-100 mb-2">Create New NPC</button>
+                    <button id="importNPC" class="btn btn-outline-primary w-100 mb-2">Import NPC</button>
+                    <button id="exportNPC" class="btn btn-outline-primary w-100">Export NPC</button>
+                    <button id="batchImportNPC" class="btn btn-outline-secondary w-100 mt-2">Batch Import</button>
+                    <button id="batchExportNPC" class="btn btn-outline-secondary w-100 mt-2">Batch Export</button>
+                    <button id="batchConvertNPC" class="btn btn-outline-secondary w-100 mt-2">Batch Convert</button>
+                    <input type="file" id="npcBatchFileInput" class="drop-zone-input mt-2" accept=".npc,.json" multiple hidden>
+                    <div class="drop-zone" id="npcDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop NPC files here</p>
+                        </div>
+                        <input type="file" id="npcFileInput" class="drop-zone-input" accept=".npc,.json" multiple hidden>
+                    </div>
+                </div>
+
+                <!-- AI Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-brain"></i> AI Tools</h3>
+                    <div class="accordion" id="aiToolsAccordion">
+                        <!-- Voice AI -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="voiceAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#voiceAICollapse" aria-expanded="false" aria-controls="voiceAICollapse">
+                                    Voice AI
+                                </button>
+                            </h2>
+                            <div id="voiceAICollapse" class="accordion-collapse collapse" aria-labelledby="voiceAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="voiceApiKey">API Key (ElevenLabs/PlayHT)</label>
+                                        <input type="password" id="voiceApiKey" class="form-control" placeholder="Enter API Key">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="voiceTextBatch">Text to Voice (Batch)</label>
+                                        <textarea id="voiceTextBatch" class="form-control" rows="3" placeholder="Enter one line per voice or upload a script file"></textarea>
+                                        <input type="file" id="voiceScriptFile" class="form-control mt-1" accept=".txt,.csv">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="voiceCloneFile">Voice Cloning (Upload Sample)</label>
+                                        <input type="file" id="voiceCloneFile" class="form-control" accept="audio/*">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label>Emotion/Style</label>
+                                        <input type="range" class="form-range" min="0" max="100" id="voiceEmotionSlider">
+                                        <div class="d-flex justify-content-between small">
+                                            <span>Neutral</span><span>Happy</span><span>Sad</span><span>Angry</span><span>Shout</span>
+                                        </div>
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="voicePhoneme">Phoneme/Pronunciation Editor</label>
+                                        <input type="text" id="voicePhoneme" class="form-control" placeholder="IPA or phoneme sequence">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="voiceNoise">Noise/Environment</label>
+                                        <select id="voiceNoise" class="form-select">
+                                            <option value="none">None</option>
+                                            <option value="street">Street</option>
+                                            <option value="club">Club</option>
+                                            <option value="radio">Radio</option>
+                                        </select>
+                                    </div>
+                                    <button id="generateVoiceAdvanced" class="btn btn-outline-primary w-100">Generate Advanced Voice</button>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Image AI -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="imageAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#imageAICollapse" aria-expanded="false" aria-controls="imageAICollapse">
+                                    Image AI
+                                </button>
+                            </h2>
+                            <div id="imageAICollapse" class="accordion-collapse collapse" aria-labelledby="imageAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="imageApiKey">API Key (Stable Diffusion, OpenAI, etc.)</label>
+                                        <input type="password" id="imageApiKey" class="form-control" placeholder="Enter API Key">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="imagePromptBatch">Image Prompts (Batch)</label>
+                                        <textarea id="imagePromptBatch" class="form-control" rows="3" placeholder="One prompt per line or upload file"></textarea>
+                                        <input type="file" id="imagePromptFile" class="form-control mt-1" accept=".txt,.csv">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="imageUpload">Inpainting/Outpainting (Upload Image)</label>
+                                        <input type="file" id="imageUpload" class="form-control" accept="image/*">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="imageStyle">Style Transfer</label>
+                                        <select id="imageStyle" class="form-select">
+                                            <option value="none">None</option>
+                                            <option value="cyberpunk">Cyberpunk</option>
+                                            <option value="anime">Anime</option>
+                                            <option value="comic">Comic Book</option>
+                                            <option value="realistic">Realistic</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="promptTemplate">Prompt Templates</label>
+                                        <select id="promptTemplate" class="form-select">
+                                            <option value="">Select a template...</option>
+                                            <option value="cityscape">Cyberpunk Cityscape</option>
+                                            <option value="npc">NPC Portrait</option>
+                                            <option value="vehicle">Vehicle</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="negativePromptLibrary">Negative Prompt Library</label>
+                                        <textarea id="negativePromptLibrary" class="form-control" rows="2" placeholder="Elements to avoid, one per line"></textarea>
+                                    </div>
+                                    <button id="generateImageAdvanced" class="btn btn-outline-primary w-100">Generate Advanced Image</button>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- NPC/Quest/Dialogue AI -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="npcAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#npcAICollapse" aria-expanded="false" aria-controls="npcAICollapse">
+                                    NPC/Quest/Dialogue AI
+                                </button>
+                            </h2>
+                            <div id="npcAICollapse" class="accordion-collapse collapse" aria-labelledby="npcAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="npcPrompt">NPC Generator (Describe personality, role, etc.)</label>
+                                        <textarea id="npcPrompt" class="form-control" rows="2" placeholder="e.g. street vendor, sarcastic, ex-cop"></textarea>
+                                    </div>
+                                    <button id="generateNPCProfile" class="btn btn-outline-primary w-100 mb-2">Generate NPC Profile</button>
+                                    <div class="form-group mb-2">
+                                        <label for="questPrompt">Quest Designer (Describe quest idea)</label>
+                                        <textarea id="questPrompt" class="form-control" rows="2" placeholder="e.g. rescue mission, betrayal twist"></textarea>
+                                    </div>
+                                    <button id="generateQuest" class="btn btn-outline-primary w-100 mb-2">Generate Quest</button>
+                                    <div class="form-group mb-2">
+                                        <label for="dialoguePrompt">Dialogue Expansion (Short line or context)</label>
+                                        <textarea id="dialoguePrompt" class="form-control" rows="2" placeholder="e.g. greeting, angry response"></textarea>
+                                    </div>
+                                    <button id="expandDialogue" class="btn btn-outline-primary w-100 mb-2">Expand Dialogue</button>
+                                    <div class="form-group mb-2">
+                                        <label for="localizationPrompt">Localization/Translation</label>
+                                        <textarea id="localizationPrompt" class="form-control" rows="2" placeholder="Text to translate"></textarea>
+                                        <select id="localizationLanguage" class="form-select mt-1">
+                                            <option value="es">Spanish</option>
+                                            <option value="fr">French</option>
+                                            <option value="de">German</option>
+                                            <option value="ja">Japanese</option>
+                                            <option value="zh">Chinese</option>
+                                        </select>
+                                    </div>
+                                    <button id="translateDialogue" class="btn btn-outline-primary w-100">Translate</button>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Audio AI -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="audioAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#audioAICollapse" aria-expanded="false" aria-controls="audioAICollapse">
+                                    Audio AI
+                                </button>
+                            </h2>
+                            <div id="audioAICollapse" class="accordion-collapse collapse" aria-labelledby="audioAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="soundEffectPrompt">Sound Effect Generation</label>
+                                        <textarea id="soundEffectPrompt" class="form-control" rows="2" placeholder="e.g. laser shot, footsteps on metal"></textarea>
+                                    </div>
+                                    <button id="generateSoundEffect" class="btn btn-outline-primary w-100 mb-2">Generate Sound Effect</button>
+                                    <div class="form-group mb-2">
+                                        <label for="musicPrompt">Music Generation</label>
+                                        <textarea id="musicPrompt" class="form-control" rows="2" placeholder="e.g. tense chase, ambient city night"></textarea>
+                                    </div>
+                                    <button id="generateMusic" class="btn btn-outline-primary w-100">Generate Music</button>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Automation & Integration -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="automationAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#automationAICollapse" aria-expanded="false" aria-controls="automationAICollapse">
+                                    Automation & Integration
+                                </button>
+                            </h2>
+                            <div id="automationAICollapse" class="accordion-collapse collapse" aria-labelledby="automationAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="autoTagPrompt">Auto-Tagging (Describe asset or upload)</label>
+                                        <input type="file" id="autoTagFile" class="form-control mb-1" accept="image/*,audio/*">
+                                        <textarea id="autoTagPrompt" class="form-control" rows="2" placeholder="Describe or leave blank for auto"></textarea>
+                                    </div>
+                                    <button id="autoTagAsset" class="btn btn-outline-primary w-100 mb-2">Auto-Tag Asset</button>
+                                    <div class="form-group mb-2">
+                                        <label for="smartSearch">Smart Search</label>
+                                        <input type="text" id="smartSearch" class="form-control" placeholder="Describe what you want to find">
+                                    </div>
+                                    <button id="runSmartSearch" class="btn btn-outline-primary w-100 mb-2">Search</button>
+                                    <div class="form-group mb-2">
+                                        <label for="upscaleFile">Asset Upscaling/Enhancement</label>
+                                        <input type="file" id="upscaleFile" class="form-control" accept="image/*">
+                                    </div>
+                                    <button id="upscaleAsset" class="btn btn-outline-primary w-100">Upscale Asset</button>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- AI Assistant/Chatbot -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="assistantAIHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#assistantAICollapse" aria-expanded="false" aria-controls="assistantAICollapse">
+                                    AI Assistant / Chatbot
+                                </button>
+                            </h2>
+                            <div id="assistantAICollapse" class="accordion-collapse collapse" aria-labelledby="assistantAIHeading" data-bs-parent="#aiToolsAccordion">
+                                <div class="accordion-body">
+                                    <div class="form-group mb-2">
+                                        <label for="assistantApiKey">API Key (OpenAI, etc.)</label>
+                                        <input type="password" id="assistantApiKey" class="form-control" placeholder="Enter API Key">
+                                    </div>
+                                    <div class="form-group mb-2">
+                                        <label for="assistantInput">Ask the AI Assistant</label>
+                                        <textarea id="assistantInput" class="form-control" rows="2" placeholder="e.g. How do I create a new quest?"></textarea>
+                                    </div>
+                                    <button id="askAssistant" class="btn btn-outline-primary w-100">Ask</button>
+                                    <div id="assistantResponse" class="mt-2 small text-info"></div>
+                                    <!-- TODO: Connect JS logic for all controls above -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Archive Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-archive"></i> Archive Tools</h3>
+                    <button id="packArchive" class="btn btn-outline-primary w-100 mb-2">Pack Archive</button>
+                    <button id="unpackArchive" class="btn btn-outline-primary w-100">Unpack Archive</button>
+                    <div class="drop-zone" id="archiveDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop archive files here</p>
+                        </div>
+                        <input type="file" id="archiveFileInput" class="drop-zone-input" accept=".archive,.zip,.rar,.7z" multiple hidden>
+                    </div>
+                </div>
+
+                <!-- UI/HUD Modding Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-desktop"></i> UI/HUD Modding</h3>
+                    <button id="extractUIAssetsBtn" class="btn btn-outline-primary w-100 mb-2">Extract UI Assets</button>
+                    <button id="repackUIAssetsBtn" class="btn btn-outline-success w-100 mb-2">Repack UI Assets</button>
+                    <input type="file" id="uiArchiveInput" class="form-control mb-2" accept=".archive,.zip,.rar,.7z">
+                    <input type="file" id="uiAssetsDirInput" class="form-control mb-2" webkitdirectory directory>
+                    <div id="uiAssetsList" class="mt-2" style="max-height:180px;overflow-y:auto;"></div>
+                </div>
+
+                <!-- Localization Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-language"></i> Localization Tools</h3>
+                    <button id="extractLocalization" class="btn btn-outline-primary w-100 mb-2">Extract Localization</button>
+                    <button id="repackLocalization" class="btn btn-outline-primary w-100">Repack Localization</button>
+                    <div class="drop-zone" id="localizationDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop localization files here</p>
+                        </div>
+                        <input type="file" id="localizationFileInput" class="drop-zone-input" accept=".archive,.json,.xliff" multiple hidden>
+                    </div>
+                </div>
+
+                <!-- Savegame Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-save"></i> Savegame Tools</h3>
+                    <button id="editSavegame" class="btn btn-outline-primary w-100">Edit Savegame</button>
+                    <div class="drop-zone" id="savegameDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop savegame files here</p>
+                        </div>
+                        <input type="file" id="savegameFileInput" class="drop-zone-input" accept=".dat,.save" multiple hidden>
+                    </div>
+                </div>
+
+                <!-- Plugin Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-plug"></i> Plugin Tools</h3>
+                    <button id="installPlugin" class="btn btn-outline-primary w-100">Install Plugin</button>
+                    <input type="text" id="pluginUrlInput" class="form-control mt-2" placeholder="Plugin URL">
+                    <button id="refreshPlugins" class="btn btn-outline-secondary w-100 mt-2">Refresh Plugin List</button>
+                    <button id="openPluginManagerBtn" class="btn btn-outline-info w-100 mt-2">Open Plugin Manager</button>
+                    <div id="pluginList" class="mt-3" aria-label="Installed Plugins">
+                        <!-- Plugin items will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Plugin Details Modal -->
+                <div class="modal fade" id="pluginDetailsModal" tabindex="-1" aria-labelledby="pluginDetailsModalLabel" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content bg-dark text-light">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="pluginDetailsModalLabel">Plugin Details</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body" id="pluginDetailsBody">
+                                <!-- Plugin details will be injected here -->
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scripting Tools Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-code"></i> Scripting Tools (REDscript)</h3>
+                    <button id="compileREDscript" class="btn btn-outline-primary w-100">Compile REDscript</button>
+                    <div class="drop-zone" id="redscriptDropZone">
+                        <div class="drop-zone-prompt">
+                            <i class="fas fa-upload"></i>
+                            <p>Drag & drop REDscript files/folders here</p>
+                        </div>
+                        <input type="file" id="redscriptFileInput" class="drop-zone-input" webkitdirectory directory multiple hidden>
+                    </div>
+                    <button id="openScriptEditor" class="btn btn-outline-secondary w-100 mt-2">Open Script Editor</button>
+                </div>
+
+                <!-- Script Editor Modal -->
+                <div class="modal fade" id="scriptEditorModal" tabindex="-1" aria-labelledby="scriptEditorModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content bg-dark text-light">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="scriptEditorModalLabel">Script Editor</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-2 d-flex align-items-center">
+                                    <input type="file" id="scriptFileBrowser" class="form-control me-2" accept=".reds,.lua,.txt,.js">
+                                    <select id="scriptEditorLanguage" class="form-select w-auto ms-2">
+                                        <option value="reds">REDscript</option>
+                                        <option value="lua">Lua</option>
+                                        <option value="javascript">JavaScript</option>
+                                        <option value="plaintext">Text</option>
+                                    </select>
+                                </div>
+                                <div id="monacoScriptEditor" style="height:480px;min-height:320px;width:100%;border:1px solid #333;border-radius:4px;resize:vertical;background:#181818;"></div>
+                                <div class="mt-2 d-flex justify-content-between">
+                                    <button id="saveScriptFile" class="btn btn-outline-success">Save</button>
+                                    <button id="compileScriptFile" class="btn btn-outline-primary">Compile</button>
+                                </div>
+                                <div id="scriptEditorOutput" class="mt-2 text-warning small" aria-live="polite" style="min-height:2em;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Preview / Hot Reload Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-bolt"></i> Live Preview / Hot Reload</h3>
+                    <button id="sendToHotReload" class="btn btn-outline-warning w-100 mb-2">Send to Hot Reload</button>
+                    <button id="openHotFolder" class="btn btn-outline-secondary w-100 mb-2">Open Hot Folder</button>
+                    <div id="rhtStatus" class="mb-2 small text-info">RHT Status: <span id="rhtStatusText">Checking...</span></div>
+                    <div id="hotReloadStatus" class="small text-success" aria-live="polite"></div>
+                </div>
+
+                <!-- Publish/Versioning Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-upload"></i> Publish / Versioning</h3>
+                    <div class="form-group mb-2">
+                        <label for="publishApiKey">NexusMods/ModDB API Key</label>
+                        <input type="password" id="publishApiKey" class="form-control" placeholder="Enter API Key">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label for="publishModTitle">Mod Title</label>
+                        <input type="text" id="publishModTitle" class="form-control" placeholder="Enter mod title">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label for="publishModDesc">Description</label>
+                        <textarea id="publishModDesc" class="form-control" rows="2" placeholder="Enter mod description"></textarea>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label for="publishModVersion">Version</label>
+                        <input type="text" id="publishModVersion" class="form-control" placeholder="e.g. 1.0.0">
+                    </div>
+                    <div class="form-group mb-2">
+                        <label for="publishModChangelog">Changelog</label>
+                        <textarea id="publishModChangelog" class="form-control" rows="2" placeholder="Describe changes in this version"></textarea>
+                    </div>
+                    <div class="form-group mb-2">
+                        <label for="publishModDeps">Dependencies (comma separated)</label>
+                        <input type="text" id="publishModDeps" class="form-control" placeholder="e.g. ArchiveXL, RED4ext">
+                    </div>
+                    <button id="publishModBtn" class="btn btn-outline-success w-100 mb-2"><i class="fas fa-cloud-upload-alt"></i> Publish Mod</button>
+                    <hr>
+                    <div class="d-flex justify-content-between mb-2">
+                        <button id="gitInitBtn" class="btn btn-sm btn-outline-secondary"><i class="fab fa-git"></i> Init Repo</button>
+                        <button id="gitCommitBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-check"></i> Commit</button>
+                        <button id="gitPushBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-upload"></i> Push</button>
+                        <button id="gitLogBtn" class="btn btn-sm btn-outline-secondary"><i class="fas fa-history"></i> Log</button>
+                    </div>
+                    <div id="gitLogOutput" class="small text-info" style="max-height:80px;overflow:auto;"></div>
+                </div>
+
+                <!-- Asset Market Section -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-store"></i> Asset Market</h3>
+                    <div class="input-group mb-2">
+                        <input type="text" id="assetMarketSearchInput" class="form-control" placeholder="Search assets..." aria-label="Search assets">
+                        <button id="assetMarketSearchBtn" class="btn btn-outline-primary" aria-label="Search Asset Market"><i class="fas fa-search"></i></button>
+                    </div>
+                    <div id="assetMarketResults" class="row g-2" aria-label="Asset Market Results" style="max-height: 320px; overflow-y: auto;"></div>
+                </div>
+
+                <!-- Community/Mods Modal -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-users"></i> Community/Mods</h3>
+                    <button id="openCommunityModsBtn" class="btn btn-outline-info w-100 mt-2">Community Mods</button>
+                </div>
+
+                <!-- Asset Sharing Modal -->
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-share-alt"></i> Asset Sharing</h3>
+                    <button id="openAssetSharingBtn" class="btn btn-outline-info w-100 mt-2">Asset Sharing</button>
+                </div>
+            </div>
+
+            <!-- Main workspace area -->
+            <div class="workspace">
+                <!-- Workspace header with new Visual Scripting tab -->
+                <div class="workspace-header">
+                    <div class="btn-toolbar p-2 bg-dark">
+                        <div class="btn-group me-2">
+                            <button id="mainWorkspaceTab" class="btn btn-sm btn-outline-primary active" aria-label="Main Workspace"><i class="fas fa-desktop"></i> Main Workspace</button>
+                            <button id="visualScriptingTab" class="btn btn-sm btn-outline-warning" aria-label="Visual Scripting / Quest Node Editor"><i class="fas fa-project-diagram"></i> Visual Scripting</button>
+                        </div>
+                        <div class="btn-group me-2" id="nodeEditorControls" style="display:none;">
+                            <button id="addQuestNode" class="btn btn-sm btn-outline-primary" aria-label="Add Node"><i class="fas fa-plus"></i> Add Node</button>
+                            <button id="saveNodeGraph" class="btn btn-sm btn-outline-success" aria-label="Save Node Graph"><i class="fas fa-save"></i> Save</button>
+                            <button id="loadNodeGraph" class="btn btn-sm btn-outline-secondary" aria-label="Load Node Graph"><i class="fas fa-folder-open"></i> Load</button>
+                            <button id="exportNodeGraph" class="btn btn-sm btn-outline-info" aria-label="Export Node Graph"><i class="fas fa-file-export"></i> Export</button>
+                            <button id="clearNodeGraph" class="btn btn-sm btn-outline-danger" aria-label="Clear Node Graph"><i class="fas fa-trash"></i> Clear</button>
+                        </div>
+                    </div>
+                </div>
+                <!-- Main workspace (default) -->
+                <div class="scene-graph" id="sceneGraphCanvas">
+                    <!-- Graph nodes will be created dynamically -->
+                    <div class="scene-graph-placeholder text-center text-muted position-absolute top-50 start-50 translate-middle">
+                        <p>Select or create a scene to edit the scene graph</p>
+                    </div>
+                </div>
+                <!-- Visual Scripting / Quest Node Editor workspace (hidden by default) -->
+                <div class="scene-graph" id="questNodeEditorCanvas" style="display:none; min-height:400px;">
+                    <div class="scene-graph-placeholder text-center text-muted position-absolute top-50 start-50 translate-middle">
+                        <p>Click 'Add Node' to start building your quest logic visually.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Console log area -->
+        <div class="console-container">
+            <div class="console-header">
+                <h5>Console</h5>
+                <div class="console-controls">
+                    <button id="clearConsole" class="btn btn-sm btn-outline-secondary"><i class="fas fa-eraser"></i> Clear</button>
+                    <button id="exportLog" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download"></i> Export Log</button>
+                    <button id="toggleConsole" class="btn btn-sm btn-outline-secondary"><i class="fas fa-chevron-up"></i></button>
+                </div>
+            </div>
+            <div class="console-log" id="consoleLog">
+                <!-- Log messages will appear here -->
+                <div class="log-message log-info">System ready. Cyberpunk 2077 Modding Toolkit initialized.</div>
+            </div>
+        </div>
+
+        <!-- Status bar -->
+        <div class="status-bar">
+            <div class="status-message" id="statusMessage">Ready</div>
+            <div class="status-indicators">
+                <span class="status-item" id="projectStatus">No project loaded</span>
+                <span class="status-item" id="memoryUsage">Memory: 0 MB</span>
+            </div>
+        </div>
+
+        <!-- Toast notifications -->
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100">
+            <div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+        </div>
+
+        <!-- Error Modal -->
+        <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content bg-danger text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="errorModalLabel">Error</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="errorModalBody">
+                        <!-- Error message will be injected here -->
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="bg-dark text-light text-center py-2 small" aria-label="Footer">
+            <span>CP77 Modding Toolkit &copy; 2025 | <a href="https://github.com/your-repo" class="text-info" target="_blank" rel="noopener">GitHub</a> | Version <span id="appVersion">1.0.0</span></span>
+        </footer>
+
+        <!-- Loading Spinner Overlay -->
+        <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none align-items-center justify-content-center" style="background: rgba(0,0,0,0.6); z-index: 2000;">
+            <div class="spinner-border text-info" role="status" style="width: 4rem; height: 4rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div id="progressBar" class="progress position-fixed top-0 start-0 w-100 d-none" style="z-index: 2001; height: 6px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- Modal for node creation -->
+    <div class="modal fade" id="createNodeModal" tabindex="-1" aria-labelledby="createNodeModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createNodeModalLabel">Create Node</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="nodeType">Node Type</label>
+                        <select class="form-select bg-dark text-light border-secondary" id="nodeType">
+                            <option value="action">Action</option>
+                            <option value="dialogue">Dialogue</option>
+                            <option value="decision">Decision</option>
+                            <option value="animation">Animation</option>
+                            <option value="camera">Camera</option>
+                            <option value="audio">Audio</option>
+                            <option value="fx">Visual Effect</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="nodeName">Node Name</label>
+                        <input type="text" class="form-control bg-dark text-light border-secondary" id="nodeName" placeholder="Enter name for this node">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="nodeDesc">Description (optional)</label>
+                        <textarea class="form-control bg-dark text-light border-secondary" id="nodeDesc" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmCreateNode">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel">Settings</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="settingsForm" novalidate>
+                        <div class="mb-3">
+                            <label for="settingTheme" class="form-label">Theme</label>
+                            <select id="settingTheme" class="form-select" aria-label="Theme select">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="settingApiKey" class="form-label">Default API Key</label>
+                            <input type="password" id="settingApiKey" class="form-control" placeholder="Enter default API key">
+                            <div class="invalid-feedback">API key is required.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="settingOutputDir" class="form-label">Default Output Directory</label>
+                            <input type="text" id="settingOutputDir" class="form-control" placeholder="e.g. C:\\Mods\\Output">
+                            <div class="invalid-feedback">Output directory is required.</div>
+                        </div>
+                        <!-- Dependencies Section -->
+                        <div class="mb-3 border-top pt-3 mt-3">
+                            <label class="form-label fw-bold">Dependencies</label>
+                            <div id="dependencyWarningArea" class="alert alert-warning d-none" role="alert"></div>
+                            <table class="table table-sm table-dark table-bordered align-middle" id="dependenciesTable">
+                                <thead>
+                                    <tr>
+                                        <th>Mod ID</th>
+                                        <th>Version</th>
+                                        <th>Required</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dependenciesTableBody">
+                                    <!-- Dependencies will be rendered here -->
+                                </tbody>
+                            </table>
+                            <div class="d-flex gap-2 align-items-end">
+                                <input type="text" id="depIdInput" class="form-control form-control-sm" placeholder="Dependency ID">
+                                <input type="text" id="depVersionInput" class="form-control form-control-sm" placeholder="Version (e.g. 1.0.0)">
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="depRequiredInput" checked>
+                                    <label class="form-check-label" for="depRequiredInput">Required</label>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="addDependencyBtn">Add</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveSettings">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOD Settings Modal -->
+    <div class="modal fade" id="lodSettingsModal" tabindex="-1" aria-labelledby="lodSettingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="lodSettingsModalLabel">LOD Generation Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="lodRatiosInput" class="form-label">LOD Ratios (comma-separated, e.g. 1.0,0.5,0.25)</label>
+                        <input type="text" class="form-control" id="lodRatiosInput" value="1.0,0.5,0.25" aria-label="LOD Ratios">
+                    </div>
+                    <div class="mb-3">
+                        <label for="lodOutputDirInput" class="form-label">Output Directory</label>
+                        <input type="text" class="form-control" id="lodOutputDirInput" placeholder="Leave blank for default (output/meshes/LODs)" aria-label="LOD Output Directory">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmGenerateLOD">Generate</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Report Modal -->
+    <div class="modal fade" id="analysisReportModal" tabindex="-1" aria-labelledby="analysisReportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="analysisReportModalLabel">Analysis Report</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="analysisReportBody" style="max-height:60vh;overflow:auto;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Market Preview Modal -->
+    <div class="modal fade" id="assetMarketPreviewModal" tabindex="-1" aria-labelledby="assetMarketPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assetMarketPreviewModalLabel">Asset Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="assetMarketPreviewBody" style="max-height:60vh;overflow:auto;"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="assetMarketDownloadBtn">Download</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mesh Editor Modal -->
+    <div class="modal fade" id="meshEditorModal" tabindex="-1" aria-labelledby="meshEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="meshEditorModalLabel">Mesh Editor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-9">
+                            <canvas id="meshEditorCanvas" style="width:100%;height:500px;background:#222;border:1px solid #333;"></canvas>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-2">
+                                <label for="meshEditorFileInput" class="form-label">Load Mesh</label>
+                                <input type="file" id="meshEditorFileInput" class="form-control" accept=".obj,.fbx,.glb,.gltf">
+                            </div>
+                            <div class="mb-2">
+                                <button id="meshEditorSaveBtn" class="btn btn-outline-success w-100">Save Mesh</button>
+                            </div>
+                            <div class="mb-2">
+                                <label>Transform</label>
+                                <input type="number" id="meshEditorPosX" class="form-control mb-1" placeholder="Pos X">
+                                <input type="number" id="meshEditorPosY" class="form-control mb-1" placeholder="Pos Y">
+                                <input type="number" id="meshEditorPosZ" class="form-control mb-1" placeholder="Pos Z">
+                                <input type="number" id="meshEditorRotX" class="form-control mb-1" placeholder="Rot X (deg)">
+                                <input type="number" id="meshEditorRotY" class="form-control mb-1" placeholder="Rot Y (deg)">
+                                <input type="number" id="meshEditorRotZ" class="form-control mb-1" placeholder="Rot Z (deg)">
+                                <input type="number" id="meshEditorScaleX" class="form-control mb-1" placeholder="Scale X" value="1">
+                                <input type="number" id="meshEditorScaleY" class="form-control mb-1" placeholder="Scale Y" value="1">
+                                <input type="number" id="meshEditorScaleZ" class="form-control mb-1" placeholder="Scale Z" value="1">
+                                <button id="meshEditorApplyTransform" class="btn btn-outline-primary w-100 mt-2">Apply Transform</button>
+                            </div>
+                            <div class="mb-2">
+                                <label for="meshEditorChildName" class="form-label">Delete Child by Name</label>
+                                <input type="text" id="meshEditorChildName" class="form-control mb-1" placeholder="Child Name">
+                                <button id="meshEditorDeleteChild" class="btn btn-outline-danger w-100">Delete Child</button>
+                            </div>
+                            <div class="mb-2">
+                                <label for="meshEditorAddChildFile" class="form-label">Add Child Mesh</label>
+                                <input type="file" id="meshEditorAddChildFile" class="form-control mb-1" accept=".obj,.fbx,.glb,.gltf">
+                                <button id="meshEditorAddChild" class="btn btn-outline-info w-100">Add Child</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Asset Preview/Editor Modal -->
+    <div class="modal fade" id="uiAssetEditorModal" tabindex="-1" aria-labelledby="uiAssetEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uiAssetEditorModalLabel">UI Asset Editor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="uiAssetPreviewContainer" class="mb-3">
+                        <!-- Image/SVG preview will be injected here -->
+                    </div>
+                    <div id="uiAssetMonacoEditor" style="height:320px;width:100%;border:1px solid #333;border-radius:4px;resize:vertical;background:#181818;display:none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button id="saveUIAssetBtn" class="btn btn-outline-success">Save</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Savegame Editor Modal -->
+    <div class="modal fade" id="savegameEditorModal" tabindex="-1" aria-labelledby="savegameEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="savegameEditorModalLabel">Savegame Editor</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="savegameFileInputModal" class="form-label">Load Savegame</label>
+                        <input type="file" id="savegameFileInputModal" class="form-control" accept=".dat,.save">
+                    </div>
+                    <div id="savegameSummary" class="mb-3"></div>
+                    <form id="savegameEditForm">
+                        <div class="row g-2">
+                            <div class="col-md-3">
+                                <label class="form-label">Player Name</label>
+                                <input type="text" class="form-control" id="sgPlayerName">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Level</label>
+                                <input type="number" class="form-control" id="sgLevel">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Street Cred</label>
+                                <input type="number" class="form-control" id="sgStreetCred">
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Money</label>
+                                <input type="number" class="form-control" id="sgMoney">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Playtime (s)</label>
+                                <input type="number" class="form-control" id="sgPlaytime" disabled>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label">Inventory (JSON)</label>
+                            <textarea class="form-control" id="sgInventory" rows="3"></textarea>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label">Quest Flags (JSON)</label>
+                            <textarea class="form-control" id="sgQuestFlags" rows="2"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" id="savegameExportBtn">Save/Export</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archive Browser Modal -->
+    <div class="modal fade" id="archiveBrowserModal" tabindex="-1" aria-labelledby="archiveBrowserModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="archiveBrowserModalLabel">Archive Browser</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="archiveBrowseFileInput" class="form-label">Select Archive</label>
+                        <input type="file" id="archiveBrowseFileInput" class="form-control" accept=".archive,.zip,.rar,.7z">
+                    </div>
+                    <div id="archiveBrowseError" class="text-danger mb-2"></div>
+                    <div id="archiveBrowseContents" style="max-height:400px;overflow:auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archive Diff Modal -->
+    <div class="modal fade" id="archiveDiffModal" tabindex="-1" aria-labelledby="archiveDiffModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="archiveDiffModalLabel">Archive Diff</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col">
+                            <label for="archiveDiffFileA" class="form-label">Archive A</label>
+                            <input type="file" id="archiveDiffFileA" class="form-control" accept=".archive,.zip,.rar,.7z">
+                        </div>
+                        <div class="col">
+                            <label for="archiveDiffFileB" class="form-label">Archive B</label>
+                            <input type="file" id="archiveDiffFileB" class="form-control" accept=".archive,.zip,.rar,.7z">
+                        </div>
+                    </div>
+                    <div id="archiveDiffError" class="text-danger mb-2"></div>
+                    <div id="archiveDiffResults" style="max-height:400px;overflow:auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archive Verify Modal -->
+    <div class="modal fade" id="archiveVerifyModal" tabindex="-1" aria-labelledby="archiveVerifyModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="archiveVerifyModalLabel">Archive Verification</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="archiveVerifyFileInput" class="form-label">Select Archive</label>
+                        <input type="file" id="archiveVerifyFileInput" class="form-control" accept=".archive,.zip,.rar,.7z">
+                    </div>
+                    <div id="archiveVerifyError" class="text-danger mb-2"></div>
+                    <div id="archiveVerifyStatus" class="mb-2"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plugin Manager Modal -->
+    <div class="modal fade" id="pluginManagerModal" tabindex="-1" aria-labelledby="pluginManagerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pluginManagerModalLabel">Plugin Manager</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm" id="importPluginBtn"><i class="fas fa-plus"></i> Import Plugin</button>
+                            <input type="file" id="importPluginFileInput" class="d-none" accept=".js,.yaml,.yml">
+                        </div>
+                        <div>
+                            <button class="btn btn-outline-secondary btn-sm" id="refreshPluginManagerBtn"><i class="fas fa-sync"></i> Refresh</button>
+                        </div>
+                    </div>
+                    <div id="pluginManagerError" class="text-danger mb-2"></div>
+                    <table class="table table-dark table-bordered align-middle" id="pluginManagerTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Version</th>
+                                <th>Author</th>
+                                <th>Description</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pluginManagerTableBody">
+                            <!-- Plugins will be rendered here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Community/Mods Modal -->
+    <div class="modal fade" id="communityModsModal" tabindex="-1" aria-labelledby="communityModsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="communityModsModalLabel">Community Mods</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex mb-3">
+                        <input type="text" id="communityModsSearchInput" class="form-control me-2" placeholder="Search mods...">
+                        <button class="btn btn-outline-primary" id="communityModsSearchBtn"><i class="fas fa-search"></i> Search</button>
+                    </div>
+                    <div id="communityModsError" class="text-danger mb-2"></div>
+                    <div id="communityModsList" class="row g-2" style="max-height: 480px; overflow-y: auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mod Details Modal -->
+    <div class="modal fade" id="modDetailsModal" tabindex="-1" aria-labelledby="modDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modDetailsModalLabel">Mod Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modDetailsBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Sharing Modal -->
+    <div class="modal fade" id="assetSharingModal" tabindex="-1" aria-labelledby="assetSharingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assetSharingModalLabel">Asset Sharing</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex mb-3">
+                        <input type="text" id="assetSharingSearchInput" class="form-control me-2" placeholder="Search assets...">
+                        <button class="btn btn-outline-primary" id="assetSharingSearchBtn"><i class="fas fa-search"></i> Search</button>
+                        <button class="btn btn-outline-success ms-2" id="openAssetUploadModalBtn"><i class="fas fa-upload"></i> Upload Asset</button>
+                    </div>
+                    <div id="assetSharingError" class="text-danger mb-2"></div>
+                    <div id="assetSharingList" class="row g-2" style="max-height: 480px; overflow-y: auto;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Upload Modal -->
+    <div class="modal fade" id="assetUploadModal" tabindex="-1" aria-labelledby="assetUploadModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assetUploadModalLabel">Upload Asset</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="assetUploadForm">
+                        <div class="mb-2">
+                            <label for="assetUploadFile" class="form-label">Select File</label>
+                            <input type="file" id="assetUploadFile" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="assetUploadName" class="form-label">Name</label>
+                            <input type="text" id="assetUploadName" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label for="assetUploadDesc" class="form-label">Description</label>
+                            <textarea id="assetUploadDesc" class="form-control" rows="2" required></textarea>
+                        </div>
+                        <div class="mb-2">
+                            <label for="assetUploadTags" class="form-label">Tags (comma separated)</label>
+                            <input type="text" id="assetUploadTags" class="form-control">
+                        </div>
+                        <div id="assetUploadError" class="text-danger mb-2"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="assetUploadSubmitBtn">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Manager Modal -->
+    <div class="modal fade" id="assetManagerModal" tabindex="-1" aria-labelledby="assetManagerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="assetManagerModalLabel">Asset Manager</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex mb-3">
+                        <input type="text" id="assetManagerSearchInput" class="form-control me-2" placeholder="Search assets...">
+                        <select id="assetManagerTypeFilter" class="form-select w-auto me-2">
+                            <option value="">All Types</option>
+                            <option value="png">Image</option>
+                            <option value="jpg">Image</option>
+                            <option value="dds">Image</option>
+                            <option value="tga">Image</option>
+                            <option value="xbm">Image</option>
+                            <option value="mesh">Mesh</option>
+                            <option value="scene">Scene</option>
+                            <option value="quest">Quest</option>
+                            <option value="json">JSON</option>
+                            <option value="js">Script</option>
+                            <option value="lua">Script</option>
+                            <option value="reds">Script</option>
+                        </select>
+                        <input type="text" id="assetManagerTagFilter" class="form-control w-auto me-2" placeholder="Tags (comma)">
+                        <button class="btn btn-outline-primary" id="assetManagerSearchBtn"><i class="fas fa-search"></i> Search</button>
+                        <button class="btn btn-outline-success ms-2" id="assetManagerBatchTagBtn"><i class="fas fa-tags"></i> Batch Tag</button>
+                        <button class="btn btn-outline-info ms-2" id="assetManagerShowGraphBtn"><i class="fas fa-project-diagram"></i> Dependency Graph</button>
+                    </div>
+                    <div id="assetManagerError" class="text-danger mb-2"></div>
+                    <div class="row">
+                        <div class="col-md-7">
+                            <div id="assetManagerList" style="max-height: 420px; overflow-y: auto;"></div>
+                        </div>
+                        <div class="col-md-5">
+                            <div id="assetManagerPreview" class="border rounded p-2 bg-secondary" style="min-height: 320px; max-height: 420px; overflow:auto;"></div>
+                        </div>
+                    </div>
+                    <div id="assetManagerGraphContainer" class="mt-4" style="display:none;">
+                        <h6>Dependency Graph</h6>
+                        <div id="assetManagerGraph" style="height: 320px; background: #222; border-radius: 8px;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Voice Model Manager Modal -->
+    <div class="modal fade" id="voiceModelManagerModal" tabindex="-1" aria-labelledby="voiceModelManagerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="voiceModelManagerModalLabel">Voice Model Manager</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <div>
+                            <button class="btn btn-outline-primary btn-sm" id="importVoiceModelBtn"><i class="fas fa-plus"></i> Import Model</button>
+                            <input type="file" id="importVoiceModelFileInput" class="d-none" accept=".pth,.onnx,.json">
+                            <button class="btn btn-outline-secondary btn-sm ms-2" id="importElevenLabsModelBtn"><i class="fas fa-cloud-upload-alt"></i> Import ElevenLabs Model</button>
+                        </div>
+                        <div>
+                            <a href="https://www.nexusmods.com/cyberpunk2077/mods/2162" target="_blank" class="btn btn-outline-info btn-sm me-2">Download CyberVoice Models</a>
+                            <a href="https://store.steampowered.com/app/1765720/xVASynth/" target="_blank" class="btn btn-outline-info btn-sm">Get xVASynth</a>
+                        </div>
+                    </div>
+                    <div id="voiceModelManagerError" class="text-danger mb-2"></div>
+                    <table class="table table-dark table-bordered align-middle" id="voiceModelManagerTable">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Source</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="voiceModelManagerTableBody">
+                            <!-- Models will be rendered here -->
+                        </tbody>
+                    </table>
+                    <div class="mt-3">
+                        <label for="voiceModelSelector" class="form-label">Select Model for Voice Generation</label>
+                        <select id="voiceModelSelector" class="form-select w-auto">
+                            <!-- Options will be rendered here -->
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap and libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsplumb@2.15.6/dist/js/jsplumb.min.js"></script>
+    <script src="renderer.js"></script>
+</body>
+</html>

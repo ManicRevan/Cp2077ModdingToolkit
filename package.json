@@ -1,0 +1,81 @@
+{
+  "name": "cp77-modding-toolkit",
+  "version": "1.0.0",
+  "description": "A comprehensive modding toolkit for Cyberpunk 2077, supporting modding, AI, and plugin features.",
+  "main": "main.js",
+  "type": "module",
+  "author": "CP77 Modding Community",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "axios": "^1.9.0",
+    "electron-store": "^10.0.1",
+    "extract-zip": "^2.0.1",
+    "follow-redirects": "^1.15.9",
+    "form-data": "^4.0.2",
+    "fs-extra": "^11.3.0",
+    "js-yaml": "^4.1.0",
+    "registry-js": "^1.16.1",
+    "sharp": "^0.34.2",
+    "simple-git": "^3.27.0",
+    "three": "^0.156.1",
+    "three-stdlib": "^2.36.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "postinstall": "node -e \"console.log('\\n[INFO] Make sure you have WolvenKit CLI and ElevenLabs API key set up before running the app.\\n')\"",
+  "build": {
+    "appId": "com.cp77.moddingtoolkit",
+    "productName": "CP77 Modding Toolkit",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icons/app-icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "assets/icons/app-icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "assets/icons/app-icon.png"
+    }
+  }
+}
