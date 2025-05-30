@@ -113,4 +113,86 @@ export async function browseAssets(query = '', page = 1) {
   const url = `${ASSET_API_BASE}/assets`;
   const res = await axios.get(url, { params: { search: query, page } });
   return res.data.assets || [];
-} 
+}
+
+// --- Plugin Marketplace API Base URL ---
+const PLUGIN_MARKET_API = 'https://cp77modkit-plugins.example.com/api/plugins';
+
+/**
+ * Fetch the list of available plugins from the marketplace
+ * @returns {Promise<Array>} Array of plugin metadata
+ */
+export async function fetchMarketplacePlugins() {
+  try {
+    const res = await axios.get(PLUGIN_MARKET_API);
+    return res.data.plugins || [];
+  } catch (err) {
+    console.error('[Marketplace] Failed to fetch plugin list:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Fetch details for a specific plugin by ID
+ * @param {string} pluginId
+ * @returns {Promise<Object|null>}
+ */
+export async function fetchPluginDetails(pluginId) {
+  try {
+    const res = await axios.get(`${PLUGIN_MARKET_API}/${pluginId}`);
+    return res.data || null;
+  } catch (err) {
+    console.error(`[Marketplace] Failed to fetch plugin details for ${pluginId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Download a plugin file by ID (returns Buffer)
+ * @param {string} pluginId
+ * @returns {Promise<Buffer|null>}
+ */
+export async function downloadPluginFile(pluginId) {
+  try {
+    const res = await axios.get(`${PLUGIN_MARKET_API}/${pluginId}/download`, { responseType: 'arraybuffer' });
+    return Buffer.from(res.data);
+  } catch (err) {
+    console.error(`[Marketplace] Failed to download plugin ${pluginId}:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Rate a plugin (1-5 stars)
+ * @param {string} pluginId
+ * @param {number} rating
+ * @returns {Promise<boolean>}
+ */
+export async function ratePlugin(pluginId, rating) {
+  try {
+    await axios.post(`${PLUGIN_MARKET_API}/${pluginId}/rate`, { rating });
+    return true;
+  } catch (err) {
+    console.error(`[Marketplace] Failed to rate plugin ${pluginId}:`, err.message);
+    return false;
+  }
+}
+
+/**
+ * Report a plugin (abuse, malware, etc.)
+ * @param {string} pluginId
+ * @param {string} reason
+ * @returns {Promise<boolean>}
+ */
+export async function reportPlugin(pluginId, reason) {
+  try {
+    await axios.post(`${PLUGIN_MARKET_API}/${pluginId}/report`, { reason });
+    return true;
+  } catch (err) {
+    console.error(`[Marketplace] Failed to report plugin ${pluginId}:`, err.message);
+    return false;
+  }
+}
+
+// TODO: Add uploadPlugin support for plugin authors (future)
+// export async function uploadPlugin(pluginFile, metadata) { ... } 

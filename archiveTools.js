@@ -17,6 +17,22 @@ try { Seven = require('node-7z'); } catch {}
 const WOLVENKIT_EXE = path.join(__dirname, 'tools', 'WolvenKit.exe');
 const CP77TOOLS_EXE = path.join(__dirname, 'tools', 'cp77tools', 'cp77tools.exe');
 
+// In-memory cache for archive listings
+const ARCHIVE_LIST_CACHE = new Map(); // key: archivePath, value: { mtime, entries, ts }
+const ARCHIVE_LIST_TTL = 5 * 60 * 1000; // 5 minutes
+function getArchiveListFromCache(archivePath) {
+  const stat = fs.statSync(archivePath);
+  const cached = ARCHIVE_LIST_CACHE.get(archivePath);
+  if (cached && cached.mtime === stat.mtimeMs && (Date.now() - cached.ts < ARCHIVE_LIST_TTL)) {
+    return cached.entries;
+  }
+  return null;
+}
+function setArchiveListInCache(archivePath, entries) {
+  const stat = fs.statSync(archivePath);
+  ARCHIVE_LIST_CACHE.set(archivePath, { mtime: stat.mtimeMs, entries, ts: Date.now() });
+}
+
 /**
  * List contents of an archive file (.archive, .zip, .7z, .rar)
  * @param {string} archivePath
@@ -24,20 +40,25 @@ const CP77TOOLS_EXE = path.join(__dirname, 'tools', 'cp77tools', 'cp77tools.exe'
  */
 export function listArchiveContents(archivePath) {
   const ext = path.extname(archivePath).toLowerCase();
+  if (ext === '.zip' || ext === '.archive') {
+    const cached = getArchiveListFromCache(archivePath);
+    if (cached) return cached;
+  }
+  let entries;
   if (ext === '.zip') {
     const zip = new AdmZip(archivePath);
-    return zip.getEntries().map(e => ({
+    entries = zip.getEntries().map(e => ({
       path: e.entryName,
       size: e.header.size,
       type: e.isDirectory ? 'dir' : 'file'
     }));
+    setArchiveListInCache(archivePath, entries);
+    return entries;
   } else if (ext === '.archive') {
-    // Use WolvenKit CLI to list contents
     const args = ['cli', 'list', '--input', archivePath];
     const result = spawnSync(WOLVENKIT_EXE, args, { encoding: 'utf8' });
     if (result.error) throw result.error;
-    // Parse output: expect lines like "file/path.ext (size)"
-    return result.stdout.split('\n').filter(Boolean).map(line => {
+    entries = result.stdout.split('\n').filter(Boolean).map(line => {
       const match = line.match(/^(.*) \((\d+)\)$/);
       if (match) {
         return { path: match[1], size: parseInt(match[2], 10), type: 'file' };
@@ -45,8 +66,10 @@ export function listArchiveContents(archivePath) {
         return { path: line, size: 0, type: 'file' };
       }
     });
+    setArchiveListInCache(archivePath, entries);
+    return entries;
   } else if ((ext === '.7z' || ext === '.rar') && Seven) {
-    // Use node-7z to list contents
+    // No cache for streaming types
     return new Promise((resolve, reject) => {
       const entries = [];
       const stream = Seven.list(archivePath);

@@ -7,6 +7,7 @@ import TTSGenerator from './ttsGenerator.js';
 import TextureAI from './textureAI.js';
 import { generateAndSaveNPC } from './npcgenerator.js';
 import { buildQuest } from './questbuilder.js';
+import sharp from 'sharp';
 
 // Simulate async delay
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -18,25 +19,92 @@ function getApiKey(options, envVar, name) {
     return key;
 }
 
+// === In-memory result cache for AI outputs ===
+const AI_RESULT_CACHE = new Map(); // key: JSON.stringify({type, prompt, options}), value: result
+const AI_RESULT_CACHE_SIZE = 50;
+function getCachedResult(type, prompt, options) {
+  const key = JSON.stringify({ type, prompt, options });
+  if (AI_RESULT_CACHE.has(key)) {
+    const value = AI_RESULT_CACHE.get(key);
+    AI_RESULT_CACHE.delete(key);
+    AI_RESULT_CACHE.set(key, value);
+    return value;
+  }
+  return null;
+}
+function setCachedResult(type, prompt, options, result) {
+  const key = JSON.stringify({ type, prompt, options });
+  if (AI_RESULT_CACHE.has(key)) AI_RESULT_CACHE.delete(key);
+  AI_RESULT_CACHE.set(key, result);
+  if (AI_RESULT_CACHE.size > AI_RESULT_CACHE_SIZE) {
+    const firstKey = AI_RESULT_CACHE.keys().next().value;
+    AI_RESULT_CACHE.delete(firstKey);
+  }
+}
+
 // === Voice AI: ElevenLabs (outputs .wem and .mp3) ===
+/**
+ * Generate voice using selected model (supports batch)
+ * @param {object} options { textBatch: string|string[], model: 'elevenlabs'|'cybervoice', voiceId, ... }
+ */
 export async function generateVoiceAdvanced(options) {
     const apiKey = getApiKey(options, 'ELEVENLABS_API_KEY', 'ElevenLabs');
-    const text = options.textBatch || '';
-    if (!text) throw new Error('Text is required for voice generation.');
+    const texts = Array.isArray(options.textBatch) ? options.textBatch : [options.textBatch];
+    const model = options.model || 'elevenlabs';
     const voiceId = options.voiceId || 'EXAVITQu4vr4xnSDxMaL';
     const tts = new TTSGenerator({ apiKey });
-    const result = await tts.generateSpeech(text, voiceId, options);
-    return { success: true, message: 'Voice generated', files: result };
+    const results = [];
+    for (const text of texts) {
+        // Check cache
+        const cached = getCachedResult('voice', text, { model, voiceId });
+        if (cached) { results.push(cached); continue; }
+        let result;
+        if (model === 'elevenlabs') {
+            result = await tts.generateSpeech(text, voiceId, options);
+            // Basic quality check: ensure .wav exists and is >1s
+            if (result.wavPath && fs.existsSync(result.wavPath)) {
+                const stats = fs.statSync(result.wavPath);
+                if (stats.size < 10000) throw new Error('Generated audio too short or empty.');
+            }
+        } else {
+            throw new Error('Only ElevenLabs model supported for now.');
+        }
+        setCachedResult('voice', text, { model, voiceId }, result);
+        results.push(result);
+    }
+    return { success: true, message: 'Voice generated', files: results };
 }
 
 // === Image AI: Stable Diffusion (outputs .xbm and .png) ===
+/**
+ * Generate images using selected model (supports batch)
+ * @param {object} options { promptBatch: string|string[], model: 'stablediffusion', ... }
+ */
 export async function generateImageAdvanced(options) {
     const apiKey = getApiKey(options, 'STABILITY_API_KEY', 'Stability AI');
-    const prompt = options.promptBatch || '';
-    if (!prompt) throw new Error('Prompt is required for image generation.');
+    const prompts = Array.isArray(options.promptBatch) ? options.promptBatch : [options.promptBatch];
+    const model = options.model || 'stablediffusion';
     const textureAI = new TextureAI({ apiKey });
-    const result = await textureAI.generateTexture(prompt, options);
-    return { success: true, message: 'Image generated', files: result };
+    const results = [];
+    for (const prompt of prompts) {
+        // Check cache
+        const cached = getCachedResult('image', prompt, { model });
+        if (cached) { results.push(cached); continue; }
+        let result;
+        if (model === 'stablediffusion') {
+            result = await textureAI.generateTexture(prompt, options);
+            // Basic quality check: ensure PNG exists and is 4K
+            if (result.pngPath && fs.existsSync(result.pngPath)) {
+                const { width, height } = await sharp(result.pngPath).metadata();
+                if (width < 2048 || height < 2048) throw new Error('Generated image resolution too low.');
+            }
+        } else {
+            throw new Error('Only Stable Diffusion model supported for now.');
+        }
+        setCachedResult('image', prompt, { model }, result);
+        results.push(result);
+    }
+    return { success: true, message: 'Image generated', files: results };
 }
 
 // === NPC/Quest/Dialogue AI: OpenAI GPT-4 (outputs .npc/.quest/.scene/.json) ===
@@ -262,4 +330,13 @@ export async function askAssistant(options) {
     } catch (err) {
         throw new Error('OpenAI API error: ' + (err.response?.data?.error?.message || err.message));
     }
+}
+
+// === TTS Batch Generation ===
+/**
+ * Generate TTS using selected model (supports batch)
+ * @param {object} options { textBatch: string|string[], model: 'elevenlabs', ... }
+ */
+export async function generateTTSBatch(options) {
+    return generateVoiceAdvanced(options);
 } 

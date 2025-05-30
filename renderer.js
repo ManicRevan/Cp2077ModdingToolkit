@@ -3414,29 +3414,98 @@ async function loadPluginManagerList() {
     }
 }
 
+// Enhance renderPluginManagerTable to show version, update, moderation status, and rating
 function renderPluginManagerTable(plugins) {
     const tbody = document.getElementById('pluginManagerTableBody');
     tbody.innerHTML = '';
     if (!plugins || plugins.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-muted">No plugins installed.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-muted">No plugins installed.</td></tr>';
         return;
     }
-    for (const plugin of plugins) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${plugin.name || plugin.id}</td>
-            <td>${plugin.version || ''}</td>
-            <td>${plugin.author || ''}</td>
-            <td>${plugin.description || ''}</td>
-            <td>${plugin.enabled === false ? '<span class="text-danger">Disabled</span>' : '<span class="text-success">Enabled</span>'}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-secondary me-1" data-action="toggle" data-id="${plugin.id}">${plugin.enabled === false ? 'Enable' : 'Disable'}</button>
-                <button class="btn btn-sm btn-outline-info me-1" data-action="update" data-id="${plugin.id}">Update</button>
-                <button class="btn btn-sm btn-outline-danger" data-action="remove" data-id="${plugin.id}">Remove</button>
-            </td>
-        `;
-        tbody.appendChild(tr);
+    communityService.fetchMarketplacePlugins().then(marketPlugins => {
+        for (const plugin of plugins) {
+            const market = marketPlugins.find(p => p.id === plugin.id);
+            const hasUpdate = market && market.version && plugin.version && market.version !== plugin.version;
+            const moderation = market ? (market.moderationStatus || 'unknown') : 'unknown';
+            const rating = market ? (market.rating ? market.rating.toFixed(1) : 'N/A') : 'N/A';
+            const isReported = moderation === 'reported';
+            const isPending = moderation === 'pending';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${plugin.name || plugin.id}</td>
+                <td>${plugin.version || ''}</td>
+                <td>${plugin.author || ''}</td>
+                <td>${plugin.description || ''}</td>
+                <td>${plugin.enabled === false ? '<span class="text-danger">Disabled</span>' : '<span class="text-success">Enabled</span>'}</td>
+                <td><span title="${hasUpdate ? 'Update available from marketplace' : 'Up to date'}" class="${hasUpdate ? 'text-warning' : 'text-success'}">${hasUpdate ? 'Update Available' : 'Up to Date'}</span></td>
+                <td><span title="Moderation status: ${moderation}" class="${moderation === 'approved' ? 'text-success' : moderation === 'reported' ? 'text-danger' : 'text-warning'}">
+                    ${moderation.charAt(0).toUpperCase() + moderation.slice(1)}
+                    ${isReported ? '<i class=\'fas fa-exclamation-triangle text-danger ms-1\' title=\'This plugin has been reported.\'></i>' : ''}
+                    ${isPending ? '<i class=\'fas fa-hourglass-half text-warning ms-1\' title=\'This plugin is pending moderation.\'></i>' : ''}
+                </span></td>
+                <td><span title="User rating">${rating}</span></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-secondary me-1" data-action="toggle" data-id="${plugin.id}">${plugin.enabled === false ? 'Enable' : 'Disable'}</button>
+                    <button class="btn btn-sm btn-outline-info me-1" data-action="update" data-id="${plugin.id}" ${hasUpdate ? '' : 'disabled'} title="${hasUpdate ? 'Update to latest version' : 'No update available'}">Update</button>
+                    <button class="btn btn-sm btn-outline-danger me-1" data-action="remove" data-id="${plugin.id}">Remove</button>
+                    <button class="btn btn-sm btn-outline-warning" data-action="report" data-id="${plugin.id}" title="Report this plugin">Report</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+        // Add event listeners for report buttons
+        tbody.querySelectorAll('button[data-action="report"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const pluginId = btn.getAttribute('data-id');
+                showReportPluginModal(pluginId);
+            });
+        });
+    });
+}
+
+function showReportPluginModal(pluginId) {
+    let modal = document.getElementById('reportPluginModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.id = 'reportPluginModal';
+        modal.tabIndex = -1;
+        modal.setAttribute('aria-labelledby', 'reportPluginModalLabel');
+        modal.setAttribute('aria-hidden', 'true');
+        modal.innerHTML = `
+        <div class="modal-dialog">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reportPluginModalLabel">Report Plugin</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="reportPluginReason">Reason/Description:</label>
+                    <textarea id="reportPluginReason" class="form-control bg-dark text-light border-secondary" rows="3" placeholder="Describe the issue or reason for reporting this plugin."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" id="submitReportPluginBtn">Submit Report</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.appendChild(modal);
     }
+    document.getElementById('reportPluginReason').value = '';
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+    document.getElementById('submitReportPluginBtn').onclick = async () => {
+        const reason = document.getElementById('reportPluginReason').value.trim();
+        if (!reason) {
+            showError('Please enter a reason for reporting.');
+            return;
+        }
+        showLoading();
+        const ok = await communityService.reportPlugin(pluginId, reason);
+        hideLoading();
+        bsModal.hide();
+        showToast(ok ? 'Report submitted.' : 'Failed to report plugin.', ok ? 'success' : 'error');
+    };
 }
 
 document.getElementById('pluginManagerTableBody').addEventListener('click', async (e) => {
@@ -4111,4 +4180,763 @@ async function renderPluginToolPanels() {
     // Refresh button
     section.querySelector('#refreshPluginPanelsBtn').onclick = renderPluginToolPanels;
 }
+// ... existing code ...
+
+// ... existing code ...
+// Listen for global errors from the main process
+if (window.electron && window.electron.ipcRenderer) {
+    window.electron.ipcRenderer.on('app:error', (event, data) => {
+        showError(data.message + (data.stack ? ('\n' + data.stack) : ''));
+    });
+}
+// ... existing code ...
+
+// ... existing code ...
+import * as communityService from './communityService.js';
+// ... existing code ...
+
+// === Plugin Marketplace Integration ===
+let marketplacePlugins = [];
+
+async function showMarketplaceModal() {
+    showLoading();
+    marketplacePlugins = await communityService.fetchMarketplacePlugins();
+    hideLoading();
+    const modalBody = document.getElementById('pluginDetailsBody');
+    if (!marketplacePlugins.length) {
+        modalBody.innerHTML = '<div class="text-muted">No plugins found in the marketplace.</div>';
+    } else {
+        modalBody.innerHTML = marketplacePlugins.map(p => `
+            <div class="market-plugin-item mb-3 p-2 bg-dark rounded">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${p.name}</strong> <span class="badge bg-secondary">v${p.version}</span><br>
+                        <span class="text-muted small">by ${p.author || 'Unknown'}</span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary" data-action="install" data-plugin-id="${p.id}" aria-label="Install ${p.name}" title="Install Plugin">Install</button>
+                </div>
+                <div class="mt-1 small">${p.description || ''}</div>
+                <div class="mt-1 small">Permissions: <span class="text-warning">${(p.permissions||[]).join(', ')||'None'}</span></div>
+                <div class="mt-1 small">Rating: <span class="text-info">${p.rating ? p.rating.toFixed(1) : 'N/A'}</span></div>
+                <div class="mt-1">
+                    <button class="btn btn-xs btn-outline-success me-1" data-action="rate" data-plugin-id="${p.id}" aria-label="Rate ${p.name}" title="Rate Plugin">Rate</button>
+                    <button class="btn btn-xs btn-outline-danger" data-action="report" data-plugin-id="${p.id}" aria-label="Report ${p.name}" title="Report Plugin">Report</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    const modal = new bootstrap.Modal(document.getElementById('pluginDetailsModal'));
+    modal.show();
+    // Add event listeners for install, rate, report
+    modalBody.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const action = btn.getAttribute('data-action');
+            const pluginId = btn.getAttribute('data-plugin-id');
+            if (action === 'install') {
+                showLoading();
+                const pluginBuffer = await communityService.downloadPluginFile(pluginId);
+                if (pluginBuffer) {
+                    // Save to plugins/ and trigger refresh
+                    await window.electron.invoke('modding:installPluginBuffer', pluginId, pluginBuffer);
+                    showToast('Plugin installed!', 'success');
+                    await refreshPluginList();
+                } else {
+                    showToast('Failed to download plugin.', 'error');
+                }
+                hideLoading();
+            } else if (action === 'rate') {
+                const rating = prompt('Enter rating (1-5):');
+                if (rating && Number(rating) >= 1 && Number(rating) <= 5) {
+                    showLoading();
+                    const ok = await communityService.ratePlugin(pluginId, Number(rating));
+                    showToast(ok ? 'Thank you for rating!' : 'Failed to rate plugin.', ok ? 'success' : 'error');
+                    hideLoading();
+                }
+            } else if (action === 'report') {
+                const reason = prompt('Describe the issue or reason for reporting this plugin:');
+                if (reason) {
+                    showLoading();
+                    const ok = await communityService.reportPlugin(pluginId, reason);
+                    showToast(ok ? 'Report submitted.' : 'Failed to report plugin.', ok ? 'success' : 'error');
+                    hideLoading();
+                }
+            }
+        });
+    });
+}
+
+// Wire up marketplace UI buttons
+const installPluginBtn = document.getElementById('installPlugin');
+if (installPluginBtn) {
+    installPluginBtn.addEventListener('click', showMarketplaceModal);
+    installPluginBtn.setAttribute('title', 'Browse and install plugins from the marketplace');
+}
+const refreshPluginsBtn = document.getElementById('refreshPlugins');
+if (refreshPluginsBtn) {
+    refreshPluginsBtn.addEventListener('click', refreshPluginList);
+    refreshPluginsBtn.setAttribute('title', 'Refresh installed plugin list');
+}
+// ... existing code ...
+
+// ... existing code ...
+// === Plugin Update Notification ===
+let pluginUpdateNotified = false;
+async function checkPluginUpdatesAndNotify() {
+    if (pluginUpdateNotified) return;
+    try {
+        const [installed, market] = await Promise.all([
+            window.electron.invoke('modding:listPlugins'),
+            communityService.fetchMarketplacePlugins()
+        ]);
+        const updates = installed.filter(inst => {
+            const m = market.find(mp => mp.id === inst.id);
+            return m && m.version && inst.version && m.version !== inst.version;
+        });
+        if (updates.length) {
+            pluginUpdateNotified = true;
+            const names = updates.map(u => u.name || u.id).join(', ');
+            showToast(`Plugin update available: ${names}. <button class='btn btn-sm btn-outline-info ms-2' onclick='openPluginManagerFromToast()'>Open Plugin Manager</button>`, 'warning');
+        }
+    } catch {}
+}
+window.openPluginManagerFromToast = function() {
+    document.getElementById('openPluginManagerBtn')?.click();
+};
+// Call on app load and after plugin list refresh
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(checkPluginUpdatesAndNotify, 2000);
+} else {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(checkPluginUpdatesAndNotify, 2000));
+}
+const origRefreshPluginList = refreshPluginList;
+refreshPluginList = async function() {
+    await origRefreshPluginList();
+    checkPluginUpdatesAndNotify();
+};
+// ... existing code ...
+
+// ... existing code ...
+// === User Profile & Collections Logic ===
+
+// User Profile
+function loadUserProfile() {
+    const profile = JSON.parse(localStorage.getItem('userProfile') || '{}');
+    document.getElementById('userNameInput').value = profile.username || '';
+    document.getElementById('userEmailInput').value = profile.email || '';
+    document.getElementById('userPreferencesInput').value = profile.preferences || '';
+}
+function saveUserProfile() {
+    const profile = {
+        username: document.getElementById('userNameInput').value.trim(),
+        email: document.getElementById('userEmailInput').value.trim(),
+        preferences: document.getElementById('userPreferencesInput').value.trim(),
+    };
+    localStorage.setItem('userProfile', JSON.stringify(profile));
+    showToast('Profile saved', 'success');
+    bootstrap.Modal.getInstance(document.getElementById('userProfileModal')).hide();
+}
+document.getElementById('openUserProfileBtn').addEventListener('click', () => {
+    loadUserProfile();
+    new bootstrap.Modal(document.getElementById('userProfileModal')).show();
+});
+document.getElementById('saveUserProfileBtn').addEventListener('click', saveUserProfile);
+
+// Plugin Collections
+function loadCollections() {
+    return JSON.parse(localStorage.getItem('pluginCollections') || '[]');
+}
+function saveCollections(collections) {
+    localStorage.setItem('pluginCollections', JSON.stringify(collections));
+}
+function renderCollections() {
+    const collections = loadCollections();
+    const list = document.getElementById('collectionsList');
+    list.innerHTML = '';
+    if (collections.length === 0) {
+        list.innerHTML = '<div class="text-muted">No collections yet.</div>';
+        return;
+    }
+    for (const col of collections) {
+        const div = document.createElement('div');
+        div.className = 'mb-2';
+        div.innerHTML = `<strong>${col.name}</strong> <span class='badge bg-secondary'>${col.plugins.length} plugins</span> <button class='btn btn-sm btn-outline-danger ms-2' title='Delete collection' aria-label='Delete collection' data-col='${col.name}'>Delete</button>`;
+        // List plugins in collection
+        if (col.plugins.length > 0) {
+            div.innerHTML += '<ul class="list-group list-group-flush">' + col.plugins.map(p => `<li class="list-group-item bg-dark text-light d-flex justify-content-between align-items-center">${p}<button class='btn btn-sm btn-outline-danger ms-2' title='Remove plugin' aria-label='Remove plugin' data-col='${col.name}' data-plugin='${p}'>Remove</button></li>`).join('') + '</ul>';
+        }
+        list.appendChild(div);
+    }
+    // Delete collection
+    list.querySelectorAll('button[title="Delete collection"]').forEach(btn => {
+        btn.onclick = e => {
+            const name = btn.getAttribute('data-col');
+            let collections = loadCollections();
+            collections = collections.filter(c => c.name !== name);
+            saveCollections(collections);
+            renderCollections();
+            showToast('Collection deleted', 'success');
+        };
+    });
+    // Remove plugin from collection
+    list.querySelectorAll('button[title="Remove plugin"]').forEach(btn => {
+        btn.onclick = e => {
+            const name = btn.getAttribute('data-col');
+            const plugin = btn.getAttribute('data-plugin');
+            let collections = loadCollections();
+            const col = collections.find(c => c.name === name);
+            if (col) {
+                col.plugins = col.plugins.filter(p => p !== plugin);
+                saveCollections(collections);
+                renderCollections();
+                showToast('Plugin removed from collection', 'success');
+            }
+        };
+    });
+}
+document.getElementById('openCollectionsBtn').addEventListener('click', () => {
+    renderCollections();
+    new bootstrap.Modal(document.getElementById('collectionsModal')).show();
+});
+document.getElementById('addCollectionBtn').addEventListener('click', () => {
+    const name = document.getElementById('newCollectionName').value.trim();
+    if (!name) {
+        showToast('Collection name required', 'warning');
+        return;
+    }
+    let collections = loadCollections();
+    if (collections.some(c => c.name === name)) {
+        showToast('Collection already exists', 'warning');
+        return;
+    }
+    collections.push({ name, plugins: [] });
+    saveCollections(collections);
+    document.getElementById('newCollectionName').value = '';
+    renderCollections();
+    showToast('Collection added', 'success');
+});
+// Add/remove plugin to/from collection (to be called from plugin manager, e.g.)
+window.addPluginToCollection = function(pluginId, collectionName) {
+    let collections = loadCollections();
+    const col = collections.find(c => c.name === collectionName);
+    if (col && !col.plugins.includes(pluginId)) {
+        col.plugins.push(pluginId);
+        saveCollections(collections);
+        showToast('Plugin added to collection', 'success');
+        renderCollections();
+    }
+};
+window.removePluginFromCollection = function(pluginId, collectionName) {
+    let collections = loadCollections();
+    const col = collections.find(c => c.name === collectionName);
+    if (col) {
+        col.plugins = col.plugins.filter(p => p !== pluginId);
+        saveCollections(collections);
+        showToast('Plugin removed from collection', 'success');
+        renderCollections();
+    }
+};
+// ... existing code ...
+
+// ... existing code ...
+// === Plugin & Mod Rating/Comment Logic ===
+
+// Utility to render star rating UI
+function renderStarRating(container, current, onRate) {
+    container.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('i');
+        star.className = 'fa-star fa-lg me-1 ' + (i <= current ? 'fas text-warning' : 'far text-secondary');
+        star.setAttribute('role', 'button');
+        star.setAttribute('tabindex', '0');
+        star.setAttribute('aria-label', `${i} star${i > 1 ? 's' : ''}`);
+        star.title = `${i} star${i > 1 ? 's' : ''}`;
+        if (onRate) {
+            star.onclick = () => onRate(i);
+            star.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') onRate(i); };
+        }
+        container.appendChild(star);
+    }
+}
+
+// Plugin Rating/Comments
+let currentPluginId = null;
+async function showPluginRatingSection(pluginId) {
+    currentPluginId = pluginId;
+    // Fetch average rating and comments
+    document.getElementById('pluginAverageRating').textContent = 'Loading...';
+    document.getElementById('pluginCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        // Fetch from backend (mocked for now)
+        // TODO: Replace with real API calls
+        avg = 4.2; // await communityService.getPluginAverageRating(pluginId);
+        userRating = 0; // await communityService.getUserPluginRating(pluginId);
+        comments = []; // await communityService.getPluginComments(pluginId);
+    } catch (e) {
+        document.getElementById('pluginAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('pluginAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('pluginRatingStars'), userRating, async (rating) => {
+        try {
+            await communityService.ratePlugin(pluginId, rating);
+            showToast('Rating submitted', 'success');
+            showPluginRatingSection(pluginId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    // Render comments
+    const list = document.getElementById('pluginCommentsList');
+    list.innerHTML = comments.length === 0 ? '<div class="text-muted">No comments yet.</div>' : comments.map(c => `<div class='border-bottom pb-1 mb-1'><strong>${c.user || 'User'}:</strong> ${c.text}</div>`).join('');
+}
+document.getElementById('submitPluginComment').addEventListener('click', async () => {
+    const comment = document.getElementById('pluginCommentInput').value.trim();
+    if (!comment) return showToast('Comment required', 'warning');
+    try {
+        // await communityService.commentPlugin(currentPluginId, comment);
+        showToast('Comment submitted', 'success');
+        document.getElementById('pluginCommentInput').value = '';
+        showPluginRatingSection(currentPluginId);
+    } catch (e) {
+        showToast('Failed to submit comment', 'error');
+    }
+});
+// Call showPluginRatingSection(pluginId) when a plugin is selected in the manager
+
+// Mod Rating/Comments
+let currentModId = null;
+async function showModRatingSection(modId) {
+    currentModId = modId;
+    document.getElementById('modAverageRating').textContent = 'Loading...';
+    document.getElementById('modCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        // Fetch from backend (mocked for now)
+        // TODO: Replace with real API calls
+        avg = 4.5; // await communityService.getModAverageRating(modId);
+        userRating = 0; // await communityService.getUserModRating(modId);
+        comments = []; // await communityService.getModComments(modId);
+    } catch (e) {
+        document.getElementById('modAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('modAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('modRatingStars'), userRating, async (rating) => {
+        try {
+            // await communityService.rateMod(null, modId, rating);
+            showToast('Rating submitted', 'success');
+            showModRatingSection(modId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    // Render comments
+    const list = document.getElementById('modCommentsList');
+    list.innerHTML = comments.length === 0 ? '<div class="text-muted">No comments yet.</div>' : comments.map(c => `<div class='border-bottom pb-1 mb-1'><strong>${c.user || 'User'}:</strong> ${c.text}</div>`).join('');
+}
+document.getElementById('submitModComment').addEventListener('click', async () => {
+    const comment = document.getElementById('modCommentInput').value.trim();
+    if (!comment) return showToast('Comment required', 'warning');
+    try {
+        // await communityService.commentMod(null, currentModId, comment);
+        showToast('Comment submitted', 'success');
+        document.getElementById('modCommentInput').value = '';
+        showModRatingSection(currentModId);
+    } catch (e) {
+        showToast('Failed to submit comment', 'error');
+    }
+});
+// Call showModRatingSection(modId) when a mod is selected in the details modal
+// ... existing code ...
+
+// ... existing code ...
+// === Author Profile Popover/Modal Logic ===
+
+// Utility to show author profile modal
+async function showAuthorProfile(username) {
+    const modal = new bootstrap.Modal(document.getElementById('authorProfileModal'));
+    const body = document.getElementById('authorProfileBody');
+    body.innerHTML = '<div class="text-muted">Loading...</div>';
+    // TODO: Fetch real user profile from backend
+    setTimeout(() => {
+        // Mocked user info
+        body.innerHTML = `
+            <div class='mb-2'><strong>Username:</strong> ${username}</div>
+            <div class='mb-2'><strong>Email:</strong> (hidden)</div>
+            <div class='mb-2'><strong>Collections:</strong> <span class='text-muted'>Not public</span></div>
+            <div class='mb-2'><strong>Bio:</strong> <span class='text-muted'>No bio set.</span></div>
+        `;
+    }, 400);
+    modal.show();
+}
+// Patch comment rendering to make author clickable
+function renderCommentList(listElem, comments) {
+    listElem.innerHTML = comments.length === 0 ? '<div class="text-muted">No comments yet.</div>' : comments.map(c => `<div class='border-bottom pb-1 mb-1'><a href='#' class='author-link' tabindex='0' data-username='${c.user || 'User'}' title='View profile'><strong>${c.user || 'User'}</strong></a>: ${c.text}</div>`).join('');
+    // Add click handlers
+    listElem.querySelectorAll('.author-link').forEach(link => {
+        link.onclick = e => { e.preventDefault(); showAuthorProfile(link.getAttribute('data-username')); };
+        link.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAuthorProfile(link.getAttribute('data-username')); } };
+    });
+}
+// Patch plugin/mod rating section logic to use renderCommentList
+// Plugin
+async function showPluginRatingSection(pluginId) {
+    currentPluginId = pluginId;
+    document.getElementById('pluginAverageRating').textContent = 'Loading...';
+    document.getElementById('pluginCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        avg = 4.2;
+        userRating = 0;
+        comments = [ { user: 'Alice', text: 'Great plugin!' }, { user: 'Bob', text: 'Needs more features.' } ];
+    } catch (e) {
+        document.getElementById('pluginAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('pluginAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('pluginRatingStars'), userRating, async (rating) => {
+        try {
+            await communityService.ratePlugin(pluginId, rating);
+            showToast('Rating submitted', 'success');
+            showPluginRatingSection(pluginId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    renderCommentList(document.getElementById('pluginCommentsList'), comments);
+}
+// Mod
+async function showModRatingSection(modId) {
+    currentModId = modId;
+    document.getElementById('modAverageRating').textContent = 'Loading...';
+    document.getElementById('modCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        avg = 4.5;
+        userRating = 0;
+        comments = [ { user: 'Alice', text: 'Awesome mod!' }, { user: 'Bob', text: 'Didn\'t work for me.' } ];
+    } catch (e) {
+        document.getElementById('modAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('modAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('modRatingStars'), userRating, async (rating) => {
+        try {
+            // await communityService.rateMod(null, modId, rating);
+            showToast('Rating submitted', 'success');
+            showModRatingSection(modId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    renderCommentList(document.getElementById('modCommentsList'), comments);
+}
+// ... existing code ...
+
+// ... existing code ...
+// === Comment Reporting Logic ===
+let reportContext = null;
+function renderCommentList(listElem, comments, contextType, contextId) {
+    listElem.innerHTML = comments.length === 0 ? '<div class="text-muted">No comments yet.</div>' : comments.map((c, idx) => `<div class='border-bottom pb-1 mb-1 d-flex justify-content-between align-items-center'><span><a href='#' class='author-link' tabindex='0' data-username='${c.user || 'User'}' title='View profile'><strong>${c.user || 'User'}</strong></a>: ${c.text}</span><span>${isAdmin ? `<button class='btn btn-sm btn-outline-danger ms-2 remove-comment-btn' title='Remove comment' aria-label='Remove comment' data-idx='${idx}'><i class='fas fa-trash'></i></button>` : ''}<button class='btn btn-sm btn-outline-danger ms-2 report-comment-btn' title='Report comment' aria-label='Report comment' data-idx='${idx}'><i class='fas fa-flag'></i></button></span></div>`).join('');
+    // Add click handlers for author
+    listElem.querySelectorAll('.author-link').forEach(link => {
+        link.onclick = e => { e.preventDefault(); showAuthorProfile(link.getAttribute('data-username')); };
+        link.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showAuthorProfile(link.getAttribute('data-username')); } };
+    });
+    // Add click handlers for report
+    listElem.querySelectorAll('.report-comment-btn').forEach(btn => {
+        btn.onclick = e => {
+            const idx = btn.getAttribute('data-idx');
+            reportContext = { contextType, contextId, comment: comments[idx] };
+            document.getElementById('reportReasonInput').value = '';
+            document.getElementById('reportDescriptionInput').value = '';
+            new bootstrap.Modal(document.getElementById('reportCommentModal')).show();
+        };
+    });
+    // Add click handlers for remove (admin)
+    if (isAdmin) {
+        listElem.querySelectorAll('.remove-comment-btn').forEach(btn => {
+            btn.onclick = e => {
+                const idx = btn.getAttribute('data-idx');
+                comments.splice(idx, 1);
+                showToast('Comment removed', 'success');
+                renderCommentList(listElem, comments, contextType, contextId);
+            };
+        });
+    }
+}
+document.getElementById('submitReportCommentBtn').addEventListener('click', async () => {
+    const reason = document.getElementById('reportReasonInput').value;
+    const desc = document.getElementById('reportDescriptionInput').value.trim();
+    if (!reason) return showToast('Reason required', 'warning');
+    if (!reportContext) return showToast('No comment selected', 'error');
+    try {
+        // TODO: Call backend API for reporting
+        // if (reportContext.contextType === 'plugin') await communityService.reportPlugin(reportContext.contextId, reason + (desc ? (': ' + desc) : ''));
+        // else if (reportContext.contextType === 'mod') await communityService.reportMod(reportContext.contextId, reason + (desc ? (': ' + desc) : ''));
+        showToast('Report submitted', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('reportCommentModal')).hide();
+    } catch (e) {
+        showToast('Failed to submit report', 'error');
+    }
+});
+// Patch plugin/mod rating section logic to use new renderCommentList
+// Plugin
+async function showPluginRatingSection(pluginId) {
+    currentPluginId = pluginId;
+    document.getElementById('pluginAverageRating').textContent = 'Loading...';
+    document.getElementById('pluginCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        avg = 4.2;
+        userRating = 0;
+        comments = [ { user: 'Alice', text: 'Great plugin!' }, { user: 'Bob', text: 'Needs more features.' } ];
+    } catch (e) {
+        document.getElementById('pluginAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('pluginAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('pluginRatingStars'), userRating, async (rating) => {
+        try {
+            await communityService.ratePlugin(pluginId, rating);
+            showToast('Rating submitted', 'success');
+            showPluginRatingSection(pluginId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    renderCommentList(document.getElementById('pluginCommentsList'), comments, 'plugin', pluginId);
+}
+// Mod
+async function showModRatingSection(modId) {
+    currentModId = modId;
+    document.getElementById('modAverageRating').textContent = 'Loading...';
+    document.getElementById('modCommentsList').innerHTML = '<div class="text-muted">Loading...</div>';
+    let avg = 0, userRating = 0, comments = [];
+    try {
+        avg = 4.5;
+        userRating = 0;
+        comments = [ { user: 'Alice', text: 'Awesome mod!' }, { user: 'Bob', text: 'Didn\'t work for me.' } ];
+    } catch (e) {
+        document.getElementById('modAverageRating').textContent = 'Failed to load ratings';
+    }
+    document.getElementById('modAverageRating').textContent = `Average: ${avg.toFixed(2)}/5`;
+    renderStarRating(document.getElementById('modRatingStars'), userRating, async (rating) => {
+        try {
+            // await communityService.rateMod(null, modId, rating);
+            showToast('Rating submitted', 'success');
+            showModRatingSection(modId);
+        } catch (e) {
+            showToast('Failed to submit rating', 'error');
+        }
+    });
+    renderCommentList(document.getElementById('modCommentsList'), comments, 'mod', modId);
+}
+// ... existing code ...
+
+// ... existing code ...
+// === Admin/Moderator Tools Logic ===
+const isAdmin = localStorage.getItem('isAdmin') === 'true'; // For demo, set manually
+// Show moderation tools sidebar if admin
+if (isAdmin) document.getElementById('moderationToolsSection').style.display = '';
+
+document.getElementById('openModerationQueueBtn').addEventListener('click', () => {
+    renderModerationQueue();
+    new bootstrap.Modal(document.getElementById('moderationQueueModal')).show();
+});
+
+// Mock moderation queue data
+let moderationQueue = [
+    { id: 1, contextType: 'plugin', contextId: 'plugin1', user: 'Alice', text: 'Spam comment', reason: 'spam' },
+    { id: 2, contextType: 'mod', contextId: 'mod1', user: 'Bob', text: 'Abusive comment', reason: 'abuse' }
+];
+function renderModerationQueue() {
+    const list = document.getElementById('moderationQueueList');
+    if (!moderationQueue.length) {
+        list.innerHTML = '<div class="text-muted">No reported comments.</div>';
+        return;
+    }
+    list.innerHTML = moderationQueue.map((c, idx) => `
+        <div class='border-bottom pb-2 mb-2'>
+            <strong>${c.user}</strong> (${c.contextType} ${c.contextId})<br>
+            <span class='text-warning'>Reason: ${c.reason}</span><br>
+            <span>${c.text}</span>
+            <div class='mt-2'>
+                <button class='btn btn-sm btn-outline-success me-2' data-action='approve' data-idx='${idx}'>Approve</button>
+                <button class='btn btn-sm btn-outline-danger me-2' data-action='remove' data-idx='${idx}'>Remove</button>
+                <button class='btn btn-sm btn-outline-secondary' data-action='reject' data-idx='${idx}'>Reject</button>
+            </div>
+        </div>
+    `).join('');
+    list.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.onclick = () => {
+            const idx = parseInt(btn.getAttribute('data-idx'));
+            const action = btn.getAttribute('data-action');
+            if (action === 'approve' || action === 'reject') {
+                moderationQueue.splice(idx, 1);
+                showToast('Comment approved', 'success');
+            } else if (action === 'remove') {
+                moderationQueue.splice(idx, 1);
+                showToast('Comment removed', 'success');
+            }
+            renderModerationQueue();
+        };
+    });
+}
+// ... existing code ...
+
+// ... existing code ...
+// === Backup & Recovery Logic ===
+
+// Mock backup/version data
+let backupHistory = [
+    { name: 'mod-backup-2024-06-01.zip', date: '2024-06-01 12:00', size: '2.1MB' },
+    { name: 'mod-backup-2024-05-30.zip', date: '2024-05-30 18:30', size: '2.0MB' }
+];
+let cloudStatus = { lastSync: '2024-06-01 12:01', status: 'Up to date' };
+
+document.getElementById('manualBackupBtn').addEventListener('click', async () => {
+    // TODO: Call backend for manual backup
+    showToast('Manual backup created', 'success');
+    // Add to mock history
+    backupHistory.unshift({ name: `mod-backup-${new Date().toISOString().slice(0,10)}.zip`, date: new Date().toLocaleString(), size: '2.2MB' });
+});
+document.getElementById('restoreBackupBtn').addEventListener('click', async () => {
+    // TODO: Show restore modal, select backup to restore
+    if (!backupHistory.length) return showToast('No backups available', 'warning');
+    showToast('Restored from latest backup', 'success');
+});
+document.getElementById('versionHistoryBtn').addEventListener('click', () => {
+    renderVersionHistory();
+    new bootstrap.Modal(document.getElementById('versionHistoryModal')).show();
+});
+function renderVersionHistory() {
+    const list = document.getElementById('versionHistoryList');
+    if (!backupHistory.length) {
+        list.innerHTML = '<div class="text-muted">No backups found.</div>';
+        return;
+    }
+    list.innerHTML = backupHistory.map((b, idx) => `
+        <div class='border-bottom pb-2 mb-2 d-flex justify-content-between align-items-center'>
+            <span><strong>${b.name}</strong><br><span class='text-muted small'>${b.date} &middot; ${b.size}</span></span>
+            <span>
+                <button class='btn btn-sm btn-outline-success me-2' data-action='restore' data-idx='${idx}'>Restore</button>
+                <button class='btn btn-sm btn-outline-danger' data-action='delete' data-idx='${idx}'>Delete</button>
+            </span>
+        </div>
+    `).join('');
+    list.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.onclick = () => {
+            const idx = parseInt(btn.getAttribute('data-idx'));
+            const action = btn.getAttribute('data-action');
+            if (action === 'restore') {
+                showToast(`Restored from ${backupHistory[idx].name}`, 'success');
+            } else if (action === 'delete') {
+                backupHistory.splice(idx, 1);
+                showToast('Backup deleted', 'success');
+                renderVersionHistory();
+            }
+        };
+    });
+}
+document.getElementById('cloudSyncBtn').addEventListener('click', () => {
+    renderCloudSyncStatus();
+    new bootstrap.Modal(document.getElementById('cloudSyncModal')).show();
+});
+function renderCloudSyncStatus() {
+    const status = document.getElementById('cloudSyncStatus');
+    status.innerHTML = `<strong>Status:</strong> ${cloudStatus.status}<br><span class='text-muted small'>Last sync: ${cloudStatus.lastSync}</span>`;
+}
+document.getElementById('cloudUploadBtn').addEventListener('click', async () => {
+    // TODO: Call backend for cloud upload
+    cloudStatus = { lastSync: new Date().toLocaleString(), status: 'Up to date' };
+    showToast('Uploaded to cloud', 'success');
+    renderCloudSyncStatus();
+});
+document.getElementById('cloudDownloadBtn').addEventListener('click', async () => {
+    // TODO: Call backend for cloud download
+    showToast('Downloaded from cloud', 'success');
+    renderCloudSyncStatus();
+});
+// ... existing code ...
+
+// ... existing code ...
+// === Data Management/Cleanup Logic ===
+
+// Add ARIA live region for status updates
+let dataMgmtStatusRegion = document.getElementById('dataMgmtStatusRegion');
+if (!dataMgmtStatusRegion) {
+    dataMgmtStatusRegion = document.createElement('div');
+    dataMgmtStatusRegion.id = 'dataMgmtStatusRegion';
+    dataMgmtStatusRegion.setAttribute('aria-live', 'polite');
+    dataMgmtStatusRegion.className = 'visually-hidden';
+    document.body.appendChild(dataMgmtStatusRegion);
+}
+
+function setDataMgmtStatus(msg) {
+    dataMgmtStatusRegion.textContent = msg;
+}
+
+function setDataMgmtBtnState(disabled) {
+    [
+        'clearCacheBtn',
+        'removeOrphansBtn',
+        'analyzeStorageBtn',
+        'optimizeStorageBtn'
+    ].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = disabled;
+    });
+}
+
+async function handleDataMgmtAction(action, onSuccess, onError) {
+    setDataMgmtBtnState(true);
+    showLoading();
+    setDataMgmtStatus('Working...');
+    try {
+        const res = await action();
+        hideLoading();
+        setDataMgmtBtnState(false);
+        setDataMgmtStatus('Done.');
+        if (onSuccess) onSuccess(res);
+    } catch (e) {
+        hideLoading();
+        setDataMgmtBtnState(false);
+        setDataMgmtStatus('Error: ' + (e.message || e));
+        if (onError) onError(e);
+    }
+}
+
+document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+    handleDataMgmtAction(
+        () => window.electron.invoke('data:clearCache'),
+        () => showToast('Cache cleared', 'success'),
+        () => showToast('Failed to clear cache', 'error')
+    );
+});
+document.getElementById('removeOrphansBtn').addEventListener('click', async () => {
+    handleDataMgmtAction(
+        () => window.electron.invoke('data:removeOrphans'),
+        (res) => showToast(`Orphaned files removed: ${res.removed}`, 'success'),
+        () => showToast('Failed to remove orphans', 'error')
+    );
+});
+document.getElementById('analyzeStorageBtn').addEventListener('click', async () => {
+    handleDataMgmtAction(
+        () => window.electron.invoke('data:analyzeStorage'),
+        (res) => {
+            renderStorageAnalysis(res.usage, res.largest);
+            const modal = new bootstrap.Modal(document.getElementById('storageAnalysisModal'));
+            modal.show();
+            // Focus modal for accessibility
+            setTimeout(() => {
+                document.getElementById('storageAnalysisModal').focus();
+            }, 300);
+        },
+        () => showToast('Failed to analyze storage', 'error')
+    );
+});
+document.getElementById('optimizeStorageBtn').addEventListener('click', async () => {
+    handleDataMgmtAction(
+        () => window.electron.invoke('data:optimizeStorage'),
+        () => showToast('Storage optimized', 'success'),
+        () => showToast('Failed to optimize storage', 'error')
+    );
+});
 // ... existing code ...

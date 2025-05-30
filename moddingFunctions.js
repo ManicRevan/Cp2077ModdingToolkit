@@ -397,4 +397,42 @@ export function repackUIAssets(inputDir, outputArchive, callback) {
   // Use WolvenKit CLI to pack the directory into an archive
   const args = ['cli', 'pack', '--input', inputDir, '--output', outputArchive];
   runWolvenKitCLI(args, null, null, callback);
+}
+
+/**
+ * Validate a mod directory for required files, manifest correctness, and structure
+ * @param {string} modDir
+ * @returns {object} { errors: string[], warnings: string[], manifest: object|null }
+ */
+export function validateMod(modDir) {
+  const report = { errors: [], warnings: [], manifest: null };
+  if (!fs.existsSync(modDir) || !fs.statSync(modDir).isDirectory()) {
+    report.errors.push('Mod directory does not exist or is not a directory.');
+    return report;
+  }
+  // Check for manifest.json
+  const manifestPath = path.join(modDir, 'manifest.json');
+  if (!fs.existsSync(manifestPath)) {
+    report.errors.push('Missing manifest.json');
+    return report;
+  }
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    report.manifest = manifest;
+    // Basic manifest checks
+    if (!manifest.id) report.errors.push('Manifest missing id');
+    if (!manifest.name) report.errors.push('Manifest missing name');
+    if (!manifest.version) report.warnings.push('Manifest missing version');
+    if (!manifest.author) report.warnings.push('Manifest missing author');
+    // Check for dependencies/conflicts
+    if (manifest.dependencies && !Array.isArray(manifest.dependencies)) report.errors.push('Manifest dependencies should be an array');
+    if (manifest.conflicts && !Array.isArray(manifest.conflicts)) report.errors.push('Manifest conflicts should be an array');
+  } catch (err) {
+    report.errors.push('Failed to parse manifest.json: ' + err.message);
+    return report;
+  }
+  // Check for at least one data file (not manifest, not backup)
+  const files = fs.readdirSync(modDir).filter(f => !f.startsWith('manifest') && !f.startsWith('backups'));
+  if (!files.length) report.errors.push('No data files found in mod directory.');
+  return report;
 } 

@@ -106,4 +106,5 @@ contextBridge.exposeInMainWorld('electron', {
   pluginEngine: {
     getToolPanels: () => ipcRenderer.invoke('pluginEngine:getToolPanels'),
   },
+  ipcRenderer: ipcRenderer,
 });

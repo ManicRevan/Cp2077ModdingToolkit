@@ -15,6 +15,33 @@ function saveDb(db) {
   fs.writeFileSync(ASSET_DB_PATH, JSON.stringify(db, null, 2));
 }
 
+// LRU Cache for asset previews
+const PREVIEW_CACHE_SIZE = 50;
+const previewCache = new Map(); // key: assetPath, value: preview
+function getFromCache(key) {
+  if (previewCache.has(key)) {
+    const value = previewCache.get(key);
+    previewCache.delete(key);
+    previewCache.set(key, value);
+    return value;
+  }
+  return null;
+}
+function setInCache(key, value) {
+  if (previewCache.has(key)) previewCache.delete(key);
+  previewCache.set(key, value);
+  if (previewCache.size > PREVIEW_CACHE_SIZE) {
+    const firstKey = previewCache.keys().next().value;
+    previewCache.delete(firstKey);
+  }
+}
+// Debounced saveDb
+let saveDbTimeout = null;
+function debouncedSaveDb(db) {
+  if (saveDbTimeout) clearTimeout(saveDbTimeout);
+  saveDbTimeout = setTimeout(() => saveDb(db), 250);
+}
+
 /**
  * Scan asset directories and update the asset database
  * @param {string[]} dirs
@@ -50,7 +77,7 @@ export function tagAsset(assetPath, tags) {
   const asset = db.assets.find(a => a.path === assetPath);
   if (asset) {
     asset.tags = Array.from(new Set([...(asset.tags || []), ...tags]));
-    saveDb(db);
+    debouncedSaveDb(db);
     return true;
   }
   return false;
@@ -75,16 +102,21 @@ export function searchAssets(query = {}) {
  * @param {string} assetPath
  */
 export function getAssetPreview(assetPath) {
+  const cached = getFromCache(assetPath);
+  if (cached) return cached;
   const ext = path.extname(assetPath).toLowerCase();
+  let preview;
   if ([".png", ".jpg", ".jpeg", ".dds", ".tga", ".xbm"].includes(ext)) {
     const data = fs.readFileSync(assetPath);
     const mime = ext === '.png' ? 'image/png' : 'image/jpeg';
-    return `data:${mime};base64,${data.toString('base64')}`;
+    preview = `data:${mime};base64,${data.toString('base64')}`;
   } else if ([".txt", ".js", ".lua", ".reds", ".json"].includes(ext)) {
-    return fs.readFileSync(assetPath, 'utf8').slice(0, 2000);
+    preview = fs.readFileSync(assetPath, 'utf8').slice(0, 2000);
   } else {
-    return 'Preview not supported.';
+    preview = 'Preview not supported.';
   }
+  setInCache(assetPath, preview);
+  return preview;
 }
 
 /**
@@ -100,7 +132,7 @@ export function batchTagAssets(assetPaths, tags) {
       asset.tags = Array.from(new Set([...(asset.tags || []), ...tags]));
     }
   }
-  saveDb(db);
+  debouncedSaveDb(db);
   return true;
 }
 
@@ -125,4 +157,69 @@ export function getDependencyGraph() {
     }
   }
   return { nodes, edges };
+}
+
+/**
+ * Clear the in-memory asset preview cache
+ */
+export function clearCache() {
+  previewCache.clear();
+}
+
+/**
+ * Remove orphaned asset files (files in asset folders not in assetdb)
+ * @param {string[]} dirs
+ * @returns {number} Number of files removed
+ */
+export function removeOrphanedAssets(dirs) {
+  const db = loadDb();
+  const known = new Set(db.assets.map(a => a.path));
+  let removed = 0;
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const file of fs.readdirSync(dir)) {
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isFile() && !known.has(filePath)) {
+        fs.unlinkSync(filePath);
+        removed++;
+      }
+    }
+  }
+  return removed;
+}
+
+/**
+ * Analyze storage usage and largest files in asset folders
+ * @param {string[]} dirs
+ * @returns {object} { usage: [{type, size, count}], largest: [{name, size}] }
+ */
+export function analyzeStorage(dirs) {
+  const usageMap = {};
+  const files = [];
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const file of fs.readdirSync(dir)) {
+      const filePath = path.join(dir, file);
+      if (fs.statSync(filePath).isFile()) {
+        const ext = path.extname(file).slice(1);
+        const size = fs.statSync(filePath).size;
+        usageMap[ext] = usageMap[ext] || { type: ext, size: 0, count: 0 };
+        usageMap[ext].size += size;
+        usageMap[ext].count++;
+        files.push({ name: file, size });
+      }
+    }
+  }
+  const usage = Object.values(usageMap).map(u => ({ ...u, size: (u.size / (1024*1024)).toFixed(1) + 'MB' }));
+  files.sort((a, b) => b.size - a.size);
+  const largest = files.slice(0, 10).map(f => ({ name: f.name, size: (f.size / (1024*1024)).toFixed(1) + 'MB' }));
+  return { usage, largest };
+}
+
+/**
+ * Optimize storage (placeholder)
+ */
+export function optimizeStorage() {
+  // Placeholder: could compress, deduplicate, etc.
+  return true;
 } 

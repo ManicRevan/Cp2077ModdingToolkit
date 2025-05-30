@@ -6,9 +6,13 @@ import yaml from 'js-yaml';
 import vm from 'vm';
 import EventEmitter from 'events';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Define the current app version for plugin compatibility checks
+const APP_VERSION = require('./package.json').version;
 
 /**
  * Plugin Engine for Cyberpunk 2077 Modding Toolkit
@@ -106,11 +110,35 @@ class PluginEngine {
         throw new Error(`Plugin from ${filePath} does not have an ID`);
       }
       
+      // --- Version compatibility checks ---
+      if (pluginDefinition.appVersion) {
+        if (!this.isVersionCompatible(APP_VERSION, pluginDefinition.appVersion)) {
+          this.logger.error(`Plugin ${pluginDefinition.id} requires app version ${pluginDefinition.appVersion}, but current version is ${APP_VERSION}`);
+          throw new Error(`Incompatible app version for plugin ${pluginDefinition.id}`);
+        }
+      }
+      
+      // --- Plugin signature/hash validation ---
+      if (pluginDefinition.signature) {
+        const fileContent = await fs.readFile(filePath, 'utf8');
+        const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
+        if (hash !== pluginDefinition.signature) {
+          this.logger.warn(`Plugin ${pluginDefinition.id} signature mismatch! Expected ${pluginDefinition.signature}, got ${hash}`);
+        }
+      } else {
+        this.logger.warn(`Plugin ${pluginDefinition.id} has no signature. Consider adding a SHA-256 signature for integrity.`);
+      }
+      
+      // --- Permissions logging ---
+      if (pluginDefinition.permissions && Array.isArray(pluginDefinition.permissions)) {
+        this.logger.info(`Plugin ${pluginDefinition.id} requests permissions: ${pluginDefinition.permissions.join(', ')}`);
+      }
+      
       // Store for dependency resolution
       this.pendingPlugins.set(pluginDefinition.id, {
         path: filePath,
         definition: pluginDefinition,
-        dependencies: pluginDefinition.dependencies || []
+        dependencies: pluginDefinition.dependencies ? pluginDefinition.dependencies.map(dep => typeof dep === 'string' ? dep : dep.id) : []
       });
       
       this.logger.info(`Discovered plugin: ${pluginDefinition.id}`);
@@ -134,18 +162,40 @@ class PluginEngine {
       const versionMatch = pluginCode.match(/version\s*:\s*['"]([^'"]+)['"]/);
       const authorMatch = pluginCode.match(/author\s*:\s*['"]([^'"]+)['"]/);
       const descMatch = pluginCode.match(/description\s*:\s*['"]([^'"]+)['"]/);
+      const appVerMatch = pluginCode.match(/appVersion\s*:\s*['"]([^'"]+)['"]/);
+      const sigMatch = pluginCode.match(/signature\s*:\s*['"]([^'"]+)['"]/);
       
-      // Extract dependencies
+      // Extract permissions
+      const permMatch = pluginCode.match(/permissions\s*:\s*\[(.*?)\]/s);
+      let permissions = [];
+      if (permMatch && permMatch[1]) {
+        const permsContent = permMatch[1].trim();
+        if (permsContent) {
+          const permRegex = /['"]([^'"]+)['"]/g;
+          let match;
+          while ((match = permRegex.exec(permsContent)) !== null) {
+            permissions.push(match[1]);
+          }
+        }
+      }
+      
+      // Extract dependencies (with version)
       const depsMatch = pluginCode.match(/dependencies\s*:\s*\[(.*?)\]/s);
       let dependencies = [];
       
       if (depsMatch && depsMatch[1]) {
         const depsContent = depsMatch[1].trim();
         if (depsContent) {
-          const depRegex = /['"]([^'"]+)['"]/g;
+          // Match objects: {id: '...', version: '...'} or strings
+          const depObjRegex = /\{\s*id\s*:\s*['"]([^'"]+)['"],\s*version\s*:\s*['"]([^'"]+)['"]\s*\}/g;
           let match;
-          while ((match = depRegex.exec(depsContent)) !== null) {
-            dependencies.push(match[1]);
+          while ((match = depObjRegex.exec(depsContent)) !== null) {
+            dependencies.push({ id: match[1], version: match[2] });
+          }
+          // Match strings: 'id'
+          const depStrRegex = /['"]([^'"]+)['"]/g;
+          while ((match = depStrRegex.exec(depsContent)) !== null) {
+            if (!dependencies.find(d => d.id === match[1])) dependencies.push(match[1]);
           }
         }
       }
@@ -156,6 +206,9 @@ class PluginEngine {
         version: versionMatch ? versionMatch[1] : '1.0.0',
         author: authorMatch ? authorMatch[1] : 'Unknown',
         description: descMatch ? descMatch[1] : '',
+        appVersion: appVerMatch ? appVerMatch[1] : undefined,
+        signature: sigMatch ? sigMatch[1] : undefined,
+        permissions,
         dependencies,
         _isJs: true
       };
@@ -184,6 +237,24 @@ class PluginEngine {
         pluginDefinition.dependencies = [];
       }
       
+      // --- Parse appVersion and dependency versions ---
+      if (pluginDefinition.appVersion && !this.isVersionCompatible(APP_VERSION, pluginDefinition.appVersion)) {
+        throw new Error(`Plugin requires app version ${pluginDefinition.appVersion}, but current version is ${APP_VERSION}`);
+      }
+      
+      // --- Signature and permissions ---
+      if (pluginDefinition.signature) {
+        const hash = crypto.createHash('sha256').update(fileContent).digest('hex');
+        if (hash !== pluginDefinition.signature) {
+          this.logger.warn(`Plugin ${pluginDefinition.id} signature mismatch! Expected ${pluginDefinition.signature}, got ${hash}`);
+        }
+      } else {
+        this.logger.warn(`Plugin ${pluginDefinition.id} has no signature. Consider adding a SHA-256 signature for integrity.`);
+      }
+      if (pluginDefinition.permissions && Array.isArray(pluginDefinition.permissions)) {
+        this.logger.info(`Plugin ${pluginDefinition.id} requests permissions: ${pluginDefinition.permissions.join(', ')}`);
+      }
+      
       pluginDefinition._isYaml = true;
       return pluginDefinition;
     } catch (error) {
@@ -202,6 +273,18 @@ class PluginEngine {
       const pluginInfo = this.pendingPlugins.get(pluginId);
       if (pluginInfo) {
         try {
+          // --- Dependency version checks ---
+          if (pluginInfo.definition.dependencies && Array.isArray(pluginInfo.definition.dependencies)) {
+            for (const dep of pluginInfo.definition.dependencies) {
+              if (typeof dep === 'object' && dep.id && dep.version) {
+                const loadedDep = this.plugins.get(dep.id);
+                if (!loadedDep || !this.isVersionCompatible(loadedDep.version, dep.version)) {
+                  this.logger.error(`Plugin ${pluginId} requires dependency ${dep.id}@${dep.version}, but found ${loadedDep ? loadedDep.version : 'none'}`);
+                  throw new Error(`Dependency version mismatch for plugin ${pluginId}`);
+                }
+              }
+            }
+          }
           await this.loadPluginFromDefinition(pluginInfo.path, pluginInfo.definition);
           this.logger.info(`Loaded plugin: ${pluginId}`);
         } catch (error) {
@@ -425,6 +508,7 @@ class PluginEngine {
       // Tool panel management
       registerToolPanel: (plugin, toolPanel) => {
         try {
+          this.logger.info(`[AUDIT] Plugin ${plugin.id} registering tool panel: ${toolPanel.id}`);
           if (!plugin || !plugin.id) {
             throw new Error('Invalid plugin reference');
           }
@@ -457,6 +541,7 @@ class PluginEngine {
       
       unregisterToolPanel: (panelId) => {
         try {
+          this.logger.info(`[AUDIT] Unregistering tool panel: ${panelId}`);
           if (this.toolPanels.has(panelId)) {
             this.toolPanels.delete(panelId);
             this.eventEmitter.emit('toolPanels.updated', Array.from(this.toolPanels.values()));
@@ -485,11 +570,13 @@ class PluginEngine {
       
       // Event system for inter-plugin communication
       on: (eventName, handler) => {
+        this.logger.info(`[AUDIT] Plugin subscribing to event: ${eventName}`);
         this.eventEmitter.on(`plugin.${eventName}`, handler);
         return true;
       },
       
       emit: (eventName, data) => {
+        this.logger.info(`[AUDIT] Plugin emitting event: ${eventName}`);
         this.eventEmitter.emit(`plugin.${eventName}`, data);
         return true;
       },
@@ -508,6 +595,10 @@ class PluginEngine {
     // Basic validation
     if (!pluginDefinition.id) {
       throw new Error(`Plugin from ${filePath} does not have an ID`);
+    }
+    
+    if (pluginDefinition.permissions && Array.isArray(pluginDefinition.permissions)) {
+      this.logger.info(`[AUDIT] Registering plugin ${pluginDefinition.id} with permissions: ${pluginDefinition.permissions.join(', ')}`);
     }
     
     // Check for duplicates
@@ -710,6 +801,17 @@ class PluginEngine {
     } catch (error) {
       this.logger.error(`Error exporting plugin: ${error.message}`);
       return false;
+    }
+  }
+
+  // --- Version compatibility helper ---
+  isVersionCompatible(current, required) {
+    // Accepts exact, ^, ~, >=, <=, >, <, or range (basic semver)
+    const semver = require('semver');
+    try {
+      return semver.satisfies(current, required);
+    } catch {
+      return current === required;
     }
   }
 }

@@ -136,6 +136,22 @@ app.on('activate', () => {
   }
 });
 
+// Automated mod backup utility
+function backupModDir(modDir) {
+  const backupsDir = path.join(modDir, 'backups');
+  fs.mkdirSync(backupsDir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.join(backupsDir, `mod-backup-${timestamp}.zip`);
+  const zip = new AdmZip();
+  zip.addLocalFolder(modDir);
+  zip.writeZip(backupPath);
+  // Keep only last 10 backups
+  const files = fs.readdirSync(backupsDir).filter(f => f.endsWith('.zip')).sort();
+  while (files.length > 10) {
+    fs.unlinkSync(path.join(backupsDir, files.shift()));
+  }
+}
+
 // Set up IPC handlers
 function setupIPC() {
   // Settings management
@@ -185,6 +201,10 @@ function setupIPC() {
     }
     
     store.set('recentProjects', recentProjects);
+    // Automated backup
+    if (projectData && projectData.path && fs.existsSync(projectData.path)) {
+      backupModDir(projectData.path);
+    }
     return true;
   });
 
@@ -1308,45 +1328,29 @@ Example:
       return { success: false, error: err.message };
     }
   });
-}
 
-function setupMeshEditorIPC() {
-  ipcMain.handle('meshEditor:loadMesh', async (event, filePath) => {
-    try {
-      const mesh = await meshEditor.loadMesh(filePath);
-      // For IPC, serialize mesh to JSON (geometry, materials, etc.)
-      return { success: true, mesh: mesh.toJSON ? mesh.toJSON() : mesh };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+  // IPC: List mod backups
+  ipcMain.handle('modding:listBackups', async (event, modDir) => {
+    const backupsDir = path.join(modDir, 'backups');
+    if (!fs.existsSync(backupsDir)) return [];
+    return fs.readdirSync(backupsDir).filter(f => f.endsWith('.zip')).sort().reverse();
   });
-  ipcMain.handle('meshEditor:saveMesh', async (event, meshJson, filePath) => {
-    try {
-      // Reconstruct mesh from JSON
-      const loader = new THREE.ObjectLoader();
-      const mesh = loader.parse(meshJson);
-      await meshEditor.saveMesh(mesh, filePath);
-      return { success: true };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
+
+  // IPC: Restore mod backup
+  ipcMain.handle('modding:restoreBackup', async (event, modDir, backupFile) => {
+    const backupsDir = path.join(modDir, 'backups');
+    const backupPath = path.join(backupsDir, backupFile);
+    if (!fs.existsSync(backupPath)) return { success: false, error: 'Backup not found' };
+    const zip = new AdmZip(backupPath);
+    zip.extractAllTo(modDir, true);
+    return { success: true };
   });
-  ipcMain.handle('meshEditor:transformMesh', async (event, meshJson, transform) => {
+
+  // IPC: Validate mod
+  ipcMain.handle('modding:validateMod', async (event, modDir) => {
     try {
-      const loader = new THREE.ObjectLoader();
-      const mesh = loader.parse(meshJson);
-      const transformed = meshEditor.transformMesh(mesh, transform);
-      return { success: true, mesh: transformed.toJSON() };
-    } catch (err) {
-      return { success: false, error: err.message };
-    }
-  });
-  ipcMain.handle('meshEditor:deleteMeshChild', async (event, meshJson, childName) => {
-    try {
-      const loader = new THREE.ObjectLoader();
-      const mesh = loader.parse(meshJson);
-      const edited = meshEditor.deleteMeshChild(mesh, childName);
-      return { success: true, mesh: edited.toJSON() };
+      const result = await moddingFunctions.validateMod(modDir);
+      return { success: true, result };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -1361,6 +1365,43 @@ function setupMeshEditorIPC() {
     } catch (err) {
       return { success: false, error: err.message };
     }
+  });
+
+  // IPC handler to install a plugin from a Buffer (marketplace install)
+  ipcMain.handle('modding:installPluginBuffer', async (event, pluginId, pluginBuffer) => {
+    try {
+      const pluginsDir = path.join(app.getAppPath(), 'plugins');
+      if (!fs.existsSync(pluginsDir)) fs.mkdirSync(pluginsDir, { recursive: true });
+      const pluginPath = path.join(pluginsDir, pluginId + '.js');
+      fs.writeFileSync(pluginPath, Buffer.from(pluginBuffer));
+      // Reload plugins
+      if (global.pluginEngine && typeof global.pluginEngine.loadAllPlugins === 'function') {
+        await global.pluginEngine.loadAllPlugins();
+      }
+      return true;
+    } catch (err) {
+      console.error('[IPC] Failed to install plugin from buffer:', err);
+      return false;
+    }
+  });
+
+  // Data management/cleanup IPC handlers
+  const ASSET_DIRS = [path.join(process.cwd(), 'assets')];
+  ipcMain.handle('data:clearCache', async () => {
+    assetManager.clearCache();
+    return { success: true };
+  });
+  ipcMain.handle('data:removeOrphans', async () => {
+    const removed = assetManager.removeOrphanedAssets(ASSET_DIRS);
+    return { success: true, removed };
+  });
+  ipcMain.handle('data:analyzeStorage', async () => {
+    const result = assetManager.analyzeStorage(ASSET_DIRS);
+    return { success: true, ...result };
+  });
+  ipcMain.handle('data:optimizeStorage', async () => {
+    const ok = assetManager.optimizeStorage();
+    return { success: ok };
   });
 }
 
@@ -1381,3 +1422,17 @@ function validateGameDirectory(path) {
     return false;
   }
 }
+
+// === Global Error Handlers ===
+process.on('uncaughtException', (err) => {
+  console.error('[Global] Uncaught Exception:', err);
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('app:error', { message: err.message, stack: err.stack });
+  }
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Global] Unhandled Rejection:', reason);
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('app:error', { message: reason && reason.message ? reason.message : String(reason), stack: reason && reason.stack ? reason.stack : '' });
+  }
+});

@@ -28,7 +28,8 @@
     "simple-git": "^3.27.0",
     "three": "^0.156.1",
     "three-stdlib": "^2.36.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "semver": "^7.5.4"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
